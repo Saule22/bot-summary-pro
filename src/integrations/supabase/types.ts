@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      content_plans: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          scheduled_date: string
+          sort_order: number
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          scheduled_date: string
+          sort_order?: number
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          scheduled_date?: string
+          sort_order?: number
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       digests: {
         Row: {
           content: string
