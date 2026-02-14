@@ -52,7 +52,13 @@ const DigestPanel = () => {
       }
 
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || "Ошибка генерации");
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          toast.warning(data.error || "Сообщений не найдено за выбранный период");
+          return;
+        }
+        throw new Error(data.error || "Ошибка генерации");
+      }
 
       toast.success("Дайджест создан!");
       qc.invalidateQueries({ queryKey: ["digests"] });
