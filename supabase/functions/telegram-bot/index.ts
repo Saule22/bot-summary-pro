@@ -269,7 +269,7 @@ async function getPhotoUrl(fileId: string): Promise<string | null> {
 }
 
 async function generateCarouselFromPhoto(chatId: number, userId: string, photoFileId: string): Promise<void> {
-  await sendMessage(chatId, "📸 Анализирую фото и создаю карусель... ⏳");
+  await sendMessage(chatId, "📸 Анализирую фото и создаю карусель с изображениями... ⏳\n\nЭто может занять 1-2 минуты.");
 
   const photoUrl = await getPhotoUrl(photoFileId);
   if (!photoUrl) {
@@ -279,71 +279,127 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
 
   const keywordList = await getUserKeywords(userId);
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        {
-          role: "system",
-          content: `Ты эксперт по созданию карусельного контента для соцсетей.
+  // Step 1: Generate carousel text structure (JSON)
+  const structureResponse = await callAI(
+    `Ты эксперт по созданию карусельного контента для соцсетей.
+Создай структуру карусели из 5 слайдов на основе ключевых слов пользователя.
 
-На основе присланного фото создай текстовую карусель из 7-10 слайдов.
-Фото — это основа контента. Опиши что на нём, и построй карусель вокруг этой темы.
-
-Формат каждого слайда:
-📌 Слайд N: [Заголовок]
-[Текст слайда — 2-3 коротких предложения]
+ВАЖНО: Ответ ТОЛЬКО в формате JSON массива, без markdown, без \`\`\`, без пояснений.
+Формат:
+[
+  {"title": "Заголовок слайда", "text": "Краткий текст 1-2 предложения"},
+  ...
+]
 
 Структура:
 - Слайд 1: Цепляющий заголовок-обложка
-- Слайды 2-8: Основной контент, связанный с фото
-- Предпоследний слайд: Резюме
-- Последний слайд: Призыв к действию
-
-Правила:
-- Не используй markdown, только текст с эмодзи
-- Нумеруй слайды
-- Учти ключевые слова пользователя: ${keywordList}`,
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Создай карусель на основе этого фото" },
-            { type: "image_url", image_url: { url: photoUrl } },
-          ],
-        },
-      ],
-      temperature: 0.8,
-      max_tokens: 2500,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error("AI carousel from photo error:", response.status, await response.text());
-    await sendMessage(chatId, "❌ Не удалось создать карусель по фото. Попробуйте позже.", getMainKeyboard());
-    await clearUserState(chatId);
-    return;
-  }
-
-  const data = await response.json();
-  const carousel = data.choices?.[0]?.message?.content;
-
-  if (!carousel) {
-    await sendMessage(chatId, "❌ Не удалось получить ответ от AI.", getMainKeyboard());
-    await clearUserState(chatId);
-    return;
-  }
-
-  await sendMessage(
-    chatId,
-    `📸 <b>Карусель по фото</b>\n\n${carousel}`,
-    getMainKeyboard()
+- Слайды 2-4: Основной контент (советы, факты)
+- Слайд 5: Призыв к действию`,
+    `Ключевые слова: ${keywordList}`,
+    0.7,
+    1000
   );
+
+  if (!structureResponse) {
+    await sendMessage(chatId, "❌ Не удалось создать структуру карусели. Попробуйте позже.", getMainKeyboard());
+    await clearUserState(chatId);
+    return;
+  }
+
+  let slides: Array<{ title: string; text: string }>;
+  try {
+    const cleaned = structureResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    slides = JSON.parse(cleaned);
+  } catch {
+    console.error("Failed to parse carousel JSON:", structureResponse);
+    await sendMessage(chatId, "❌ Ошибка при создании структуры. Попробуйте ещё раз.", getMainKeyboard());
+    await clearUserState(chatId);
+    return;
+  }
+
+  // Step 2: Generate image for each slide using the user's photo + text overlay
+  await sendMessage(chatId, `📸 Создаю ${slides.length} слайдов с вашим фото...`);
+
+  for (let i = 0; i < slides.length; i++) {
+    const slide = slides[i];
+    const slideNum = i + 1;
+
+    try {
+      const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-image",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Создай слайд для карусели в Instagram/Telegram. 
+Используй это фото как основу/фон. Наложи поверх фото текст:
+
+ЗАГОЛОВОК: ${slide.title}
+ТЕКСТ: ${slide.text}
+НОМЕР СЛАЙДА: ${slideNum}/${slides.length}
+
+Правила дизайна:
+- Фото должно быть видно, но слегка затемнено для читаемости текста
+- Заголовок крупным жирным белым шрифтом сверху или по центру
+- Текст поменьше белым шрифтом под заголовком
+- Номер слайда мелко в углу
+- Соотношение сторон 1:1 (квадрат)
+- Стильный современный дизайн`
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: photoUrl }
+                }
+              ]
+            }
+          ],
+          modalities: ["image", "text"]
+        }),
+      });
+
+      if (!imageResponse.ok) {
+        console.error(`Slide ${slideNum} generation error:`, imageResponse.status);
+        // Send text fallback for this slide
+        await sendMessage(chatId, `📌 <b>Слайд ${slideNum}/${slides.length}: ${slide.title}</b>\n\n${slide.text}`);
+        continue;
+      }
+
+      const imageData = await imageResponse.json();
+      const slideImageUrl = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+      if (slideImageUrl && slideImageUrl.startsWith("data:")) {
+        const base64Data = slideImageUrl.split(",")[1];
+        const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+        const formData = new FormData();
+        formData.append("chat_id", chatId.toString());
+        formData.append("photo", new Blob([binaryData], { type: "image/png" }), `slide_${slideNum}.png`);
+        formData.append("caption", `📌 Слайд ${slideNum}/${slides.length}: ${slide.title}\n\n${slide.text}`);
+
+        await fetch(`${TELEGRAM_API}/sendPhoto`, {
+          method: "POST",
+          body: formData,
+        });
+      } else if (slideImageUrl) {
+        await sendPhoto(chatId, slideImageUrl, `📌 Слайд ${slideNum}/${slides.length}: ${slide.title}\n\n${slide.text}`);
+      } else {
+        await sendMessage(chatId, `📌 <b>Слайд ${slideNum}/${slides.length}: ${slide.title}</b>\n\n${slide.text}`);
+      }
+    } catch (err) {
+      console.error(`Error generating slide ${slideNum}:`, err);
+      await sendMessage(chatId, `📌 <b>Слайд ${slideNum}/${slides.length}: ${slide.title}</b>\n\n${slide.text}`);
+    }
+  }
+
+  await sendMessage(chatId, "✅ Карусель готова! Выберите следующее действие:", getMainKeyboard());
   await clearUserState(chatId);
 }
 
