@@ -150,60 +150,63 @@ async function clearUserState(chatId: number): Promise<void> {
 }
 
 async function generateContentIdeas(chatId: number, userId: string): Promise<void> {
-  await sendMessage(chatId, "💡 Генерирую идеи для контента... ⏳");
+  await sendMessage(chatId, "💡 Контент идеяларын жасап жатырмын... ⏳");
   const keywordList = await getUserKeywords(userId);
 
   const ideas = await callAI(
-    `Ты эксперт по созданию контента для социальных сетей. Придумай 5 оригинальных идей для постов.
-Каждая идея должна быть:
-- Оригинальной и привлекательной
-- Уместной для Telegram каналов
-- С кратким описанием (1-2 предложения)
+    `Сен әлеуметтік желілерге контент жасау бойынша сарапшысың. 5 түпнұсқа пост идеясын ойлап тап.
+Әрбір идея:
+- Түпнұсқа және қызықты болуы керек
+- Telegram арналарына лайықты болуы керек
+- Қысқа сипаттамамен (1-2 сөйлем)
 
-Формат: пронумерованный список. Не используй markdown, используй простой текст с эмодзи.`,
-    `Придумай 5 идей для постов по этим ключевым словам: ${keywordList}`
+МАҢЫЗДЫ: Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.
+Формат: нөмірленген тізім. Markdown қолданба, қарапайым мәтін мен эмодзи қолдан.`,
+    `Осы кілт сөздер бойынша 5 пост идеясын ойлап тап: ${keywordList}`
   );
 
   if (!ideas) {
-    await sendMessage(chatId, "❌ Не удалось сгенерировать идеи. Попробуйте позже.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Идеяларды жасау мүмкін болмады. Кейінірек қайталап көріңіз.", getMainKeyboard());
     return;
   }
 
   await sendMessage(
     chatId,
-    `💡 <b>Идеи для контента</b>\n\n🔑 Ключевые слова: <i>${keywordList}</i>\n\n${ideas}`,
+    `💡 <b>Контент идеялары</b>\n\n🔑 Кілт сөздер: <i>${keywordList}</i>\n\n${ideas}`,
     getMainKeyboard()
   );
 }
 
 async function generateStorytelling(chatId: number, userId: string): Promise<void> {
-  await sendMessage(chatId, "📖 Создаю сторителлинг-пост... ⏳");
+  await sendMessage(chatId, "📖 Сторителлинг-пост жасап жатырмын... ⏳");
   const keywordList = await getUserKeywords(userId);
 
   const story = await callAI(
-    `Ты профессиональный копирайтер и мастер сторителлинга. Создай вовлекающий пост-историю для Telegram канала.
+    `Сен кәсіби копирайтер және сторителлинг шеберісің. Telegram арнасы үшін қызықтыратын пост-әңгіме жаз.
 
-Структура поста:
-1. Цепляющий хук (первое предложение, которое заставит остановиться)
-2. Завязка — опиши ситуацию или проблему
-3. Развитие — покажи путь или трансформацию
-4. Кульминация — ключевой инсайт или урок
-5. Призыв к действию — задай вопрос аудитории для вовлечения
+Пост құрылымы:
+1. Ілмек (оқуды тоқтатуға мәжбүрлейтін бірінші сөйлем)
+2. Кіріспе — жағдайды немесе мәселені сипатта
+3. Даму — жолды немесе өзгерісті көрсет
+4. Шарықтау — негізгі инсайт немесе сабақ
+5. Әрекетке шақыру — аудиторияға сұрақ қой
 
-Правила:
-- Пиши от первого лица или от лица эксперта
-- Используй короткие абзацы (1-2 предложения)
-- Добавь эмодзи для акцентов, но не переборщи
-- В конце обязательно задай вопрос аудитории
-- Не используй markdown, только простой текст
-- Длина: 800-1500 символов`,
-    `Напиши сторителлинг-пост на тему: ${keywordList}`,
+Ережелер:
+- Бірінші жақтан немесе сарапшы атынан жаз
+- Қысқа абзацтар қолдан (1-2 сөйлем)
+- Акцент үшін эмодзи қос, бірақ артық қолданба
+- Соңында аудиторияға сұрақ қой
+- Markdown қолданба, тек қарапайым мәтін
+- Ұзындығы: 800-1500 таңба
+
+МАҢЫЗДЫ: Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.`,
+    `Осы тақырыпта сторителлинг-пост жаз: ${keywordList}`,
     0.85,
     2000
   );
 
   if (!story) {
-    await sendMessage(chatId, "❌ Не удалось создать сторителлинг. Попробуйте позже.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Сторителлинг жасау мүмкін болмады. Кейінірек қайталап көріңіз.", getMainKeyboard());
     return;
   }
 
@@ -215,43 +218,45 @@ async function generateStorytelling(chatId: number, userId: string): Promise<voi
 }
 
 async function generateCarousel(chatId: number, userId: string): Promise<void> {
-  await sendMessage(chatId, "🎠 Создаю карусель... ⏳");
+  await sendMessage(chatId, "🎠 Карусель жасап жатырмын... ⏳");
   const keywordList = await getUserKeywords(userId);
 
   const carousel = await callAI(
-    `Ты эксперт по созданию карусельного контента для соцсетей (Instagram, LinkedIn, Telegram).
+    `Сен әлеуметтік желілерге (Instagram, LinkedIn, Telegram) карусель контент жасау бойынша сарапшысың.
 
-Создай текстовую карусель из 7-10 слайдов.
+7-10 слайдтан тұратын мәтіндік карусель жаса.
 
-Формат каждого слайда:
-📌 Слайд N: [Заголовок]
-[Текст слайда — 2-3 коротких предложения]
+Әрбір слайд форматы:
+📌 Слайд N: [Тақырып]
+[Слайд мәтіні — 2-3 қысқа сөйлем]
 
-Структура карусели:
-- Слайд 1: Цепляющий заголовок / обложка (вопрос или провокация)
-- Слайды 2-8: Основной контент (советы, факты, шаги)
-- Предпоследний слайд: Резюме / ключевой вывод
-- Последний слайд: Призыв к действию (подписка, лайк, комментарий)
+Карусель құрылымы:
+- Слайд 1: Қызықтыратын тақырып / мұқаба (сұрақ немесе провокация)
+- Слайдтар 2-8: Негізгі контент (кеңестер, фактілер, қадамдар)
+- Соңғының алдындағы слайд: Қорытынды / негізгі тұжырым
+- Соңғы слайд: Әрекетке шақыру (жазылу, лайк, пікір)
 
-Правила:
-- Каждый слайд должен быть самостоятельным и понятным
-- Короткие предложения, никаких длинных абзацев
-- Используй эмодзи для визуального акцента
-- Не используй markdown
-- Нумеруй слайды`,
-    `Создай карусель на тему: ${keywordList}`,
+Ережелер:
+- Әрбір слайд өзі жеке түсінікті болуы керек
+- Қысқа сөйлемдер, ұзын абзацтар жоқ
+- Визуалды акцент үшін эмодзи қолдан
+- Markdown қолданба
+- Слайдтарды нөмірле
+
+МАҢЫЗДЫ: Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.`,
+    `Осы тақырыпта карусель жаса: ${keywordList}`,
     0.8,
     2500
   );
 
   if (!carousel) {
-    await sendMessage(chatId, "❌ Не удалось создать карусель. Попробуйте позже.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Карусель жасау мүмкін болмады. Кейінірек қайталап көріңіз.", getMainKeyboard());
     return;
   }
 
   await sendMessage(
     chatId,
-    `🎠 <b>Карусель-пост</b>\n\n🔑 Тема: <i>${keywordList}</i>\n\n${carousel}`,
+    `🎠 <b>Карусель-пост</b>\n\n🔑 Тақырып: <i>${keywordList}</i>\n\n${carousel}`,
     getMainKeyboard()
   );
 }
@@ -269,39 +274,40 @@ async function getPhotoUrl(fileId: string): Promise<string | null> {
 }
 
 async function generateCarouselFromPhoto(chatId: number, userId: string, photoFileId: string): Promise<void> {
-  await sendMessage(chatId, "📸 Анализирую фото и создаю карусель с изображениями... ⏳\n\nЭто может занять 1-2 минуты.");
+  await sendMessage(chatId, "📸 Фотоны талдап, суреттермен карусель жасап жатырмын... ⏳\n\nБұл 1-2 минут алуы мүмкін.");
 
   const photoUrl = await getPhotoUrl(photoFileId);
   if (!photoUrl) {
-    await sendMessage(chatId, "❌ Не удалось загрузить фото. Попробуйте ещё раз.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Фотоны жүктеу мүмкін болмады. Қайталап көріңіз.", getMainKeyboard());
     return;
   }
 
   const keywordList = await getUserKeywords(userId);
 
-  // Step 1: Generate carousel text structure (JSON)
+  // Step 1: Generate carousel text structure (JSON) in Kazakh
   const structureResponse = await callAI(
-    `Ты эксперт по созданию карусельного контента для соцсетей.
-Создай структуру карусели из 5 слайдов на основе ключевых слов пользователя.
+    `Сен әлеуметтік желілерге карусель контент жасау бойынша сарапшысың.
+Пайдаланушының кілт сөздері негізінде 5 слайдтан тұратын карусель құрылымын жаса.
 
-ВАЖНО: Ответ ТОЛЬКО в формате JSON массива, без markdown, без \`\`\`, без пояснений.
+МАҢЫЗДЫ: Жауап ТЕК JSON массив форматында, markdown жоқ, \`\`\` жоқ, түсіндірмелер жоқ.
+Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.
 Формат:
 [
-  {"title": "Заголовок слайда", "text": "Краткий текст 1-2 предложения"},
+  {"title": "Слайд тақырыбы", "text": "Қысқа мәтін 1-2 сөйлем"},
   ...
 ]
 
-Структура:
-- Слайд 1: Цепляющий заголовок-обложка
-- Слайды 2-4: Основной контент (советы, факты)
-- Слайд 5: Призыв к действию`,
-    `Ключевые слова: ${keywordList}`,
+Құрылымы:
+- Слайд 1: Қызықтыратын тақырып-мұқаба
+- Слайдтар 2-4: Негізгі контент (кеңестер, фактілер)
+- Слайд 5: Әрекетке шақыру`,
+    `Кілт сөздер: ${keywordList}`,
     0.7,
     1000
   );
 
   if (!structureResponse) {
-    await sendMessage(chatId, "❌ Не удалось создать структуру карусели. Попробуйте позже.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Карусель құрылымын жасау мүмкін болмады. Кейінірек қайталаңыз.", getMainKeyboard());
     await clearUserState(chatId);
     return;
   }
@@ -312,13 +318,13 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
     slides = JSON.parse(cleaned);
   } catch {
     console.error("Failed to parse carousel JSON:", structureResponse);
-    await sendMessage(chatId, "❌ Ошибка при создании структуры. Попробуйте ещё раз.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Құрылымды жасау кезінде қате. Қайталап көріңіз.", getMainKeyboard());
     await clearUserState(chatId);
     return;
   }
 
   // Step 2: Generate image for each slide using the user's photo + text overlay
-  await sendMessage(chatId, `📸 Создаю ${slides.length} слайдов с вашим фото...`);
+  await sendMessage(chatId, `📸 Фотоңызбен ${slides.length} слайд жасап жатырмын...`);
 
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i];
@@ -339,20 +345,21 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
               content: [
                 {
                   type: "text",
-                  text: `Создай слайд для карусели в Instagram/Telegram. 
-Используй это фото как основу/фон. Наложи поверх фото текст:
+                  text: `Instagram/Telegram үшін карусель слайдын жаса. 
+Бұл фотоны негіз/фон ретінде қолдан. Фотоның үстіне мәтін жаз:
 
-ЗАГОЛОВОК: ${slide.title}
-ТЕКСТ: ${slide.text}
-НОМЕР СЛАЙДА: ${slideNum}/${slides.length}
+ТАҚЫРЫП: ${slide.title}
+МӘТІН: ${slide.text}
+СЛАЙД НӨМІРІ: ${slideNum}/${slides.length}
 
-Правила дизайна:
-- Фото должно быть видно, но слегка затемнено для читаемости текста
-- Заголовок крупным жирным белым шрифтом сверху или по центру
-- Текст поменьше белым шрифтом под заголовком
-- Номер слайда мелко в углу
-- Соотношение сторон 1:1 (квадрат)
-- Стильный современный дизайн`
+Дизайн ережелері:
+- Фото көрінуі керек, бірақ мәтіннің оқылуы үшін сәл қараңғылау
+- Тақырып ірі қалың ақ шрифтпен жоғарыда немесе ортада
+- Мәтін кішірек ақ шрифтпен тақырыптың астында
+- Слайд нөмірі бұрышта ұсақ
+- Пропорция 1:1 (шаршы)
+- Стильді заманауи дизайн
+- Барлық мәтін ҚАЗАҚ тілінде болуы керек`
                 },
                 {
                   type: "image_url",
@@ -399,17 +406,17 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
     }
   }
 
-  await sendMessage(chatId, "✅ Карусель готова! Выберите следующее действие:", getMainKeyboard());
+  await sendMessage(chatId, "✅ Карусель дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
   await clearUserState(chatId);
 }
 
 async function handleImageGeneration(chatId: number, prompt: string): Promise<void> {
-  await sendMessage(chatId, "🖼 Генерирую изображение... ⏳");
+  await sendMessage(chatId, "🖼 Сурет жасап жатырмын... ⏳");
 
   const imageUrl = await generateImage(prompt);
 
   if (!imageUrl) {
-    await sendMessage(chatId, "❌ Не удалось сгенерировать изображение. Попробуйте другое описание.", getMainKeyboard());
+    await sendMessage(chatId, "❌ Суретті жасау мүмкін болмады. Басқа сипаттаманы қолданып көріңіз.", getMainKeyboard());
     return;
   }
 
@@ -422,18 +429,18 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
     const formData = new FormData();
     formData.append("chat_id", chatId.toString());
     formData.append("photo", new Blob([binaryData], { type: "image/png" }), "generated.png");
-    formData.append("caption", `🖼 Изображение по запросу: "${prompt}"`);
+    formData.append("caption", `🖼 Сұраныс бойынша сурет: "${prompt}"`);
 
     await fetch(`${TELEGRAM_API}/sendPhoto`, {
       method: "POST",
       body: formData,
     });
   } else {
-    await sendPhoto(chatId, imageUrl, `🖼 Изображение по запросу: "${prompt}"`);
+    await sendPhoto(chatId, imageUrl, `🖼 Сұраныс бойынша сурет: "${prompt}"`);
   }
 
   await clearUserState(chatId);
-  await sendMessage(chatId, "✅ Готово! Выберите следующее действие:", getMainKeyboard());
+  await sendMessage(chatId, "✅ Дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
 }
 
 async function handleMessage(message: { chat: { id: number; username?: string }; text?: string; photo?: Array<{ file_id: string }> }) {
@@ -444,7 +451,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     await clearUserState(chatId);
     return sendMessage(
       chatId,
-      `👋 Привет! Я AI Content Bot.\n\n🔑 Ваш Chat ID: <code>${chatId}</code>\n\nСкопируйте его и вставьте в настройках приложения для привязки аккаунта.\n\nВыберите действие:`,
+      `👋 Сәлем! Мен AI Content Bot.\n\n🔑 Сіздің Chat ID: <code>${chatId}</code>\n\nОны көшіріп, қосымша параметрлерінде аккаунтты байланыстыру үшін қойыңыз.\n\nӘрекетті таңдаңыз:`,
       getMainKeyboard()
     );
   }
@@ -455,7 +462,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   if (message.photo && message.photo.length > 0 && currentAction === "awaiting_photo_for_carousel") {
     const userId = await getUserIdByChatId(chatId);
     if (!userId) {
-      await sendMessage(chatId, "⚠️ Привяжите Telegram в настройках. Ваш Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
+      await sendMessage(chatId, "⚠️ Telegram-ді параметрлерде байланыстырыңыз. Сіздің Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
       await clearUserState(chatId);
       return;
     }
@@ -469,7 +476,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   if (currentAction === "awaiting_image_prompt") {
     const userId = await getUserIdByChatId(chatId);
     if (!userId) {
-      await sendMessage(chatId, "⚠️ Привяжите Telegram в настройках. Ваш Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
+      await sendMessage(chatId, "⚠️ Telegram-ді параметрлерде байланыстырыңыз. Сіздің Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
       await clearUserState(chatId);
       return;
     }
@@ -485,14 +492,14 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     if (!userId) {
       await sendMessage(
         chatId,
-        "⚠️ Ваш Telegram не привязан к аккаунту. Привяжите его в настройках приложения, указав ваш Chat ID: <code>" + chatId + "</code>",
+        "⚠️ Сіздің Telegram аккаунтқа байланыстырылмаған. Қосымша параметрлерінде Chat ID көрсетіңіз: <code>" + chatId + "</code>",
         getMainKeyboard()
       );
       return;
     }
 
     if (text === "📰 Свежие Новости") {
-      return sendMessage(chatId, "📰 <b>Свежие Новости</b>\n\nФункция сбора новостей в разработке.", getMainKeyboard());
+      return sendMessage(chatId, "📰 <b>Соңғы Жаңалықтар</b>\n\nЖаңалықтар жинау функциясы әзірленуде.", getMainKeyboard());
     }
 
     if (text === "💡 Идеи для контента") { await generateContentIdeas(chatId, userId); return; }
@@ -501,20 +508,20 @@ async function handleMessage(message: { chat: { id: number; username?: string };
 
     if (text === "🖼 Сгенерировать изображение") {
       await setUserState(chatId, "awaiting_image_prompt");
-      return sendMessage(chatId, "🖼 <b>Генерация изображения</b>\n\nОпишите, какое изображение вы хотите создать.\n\nНапример:\n• <i>Минималистичный баннер для поста про AI</i>\n• <i>Яркая иллюстрация нейросети в стиле киберпанк</i>\n• <i>Фон для stories с градиентом и текстом</i>");
+      return sendMessage(chatId, "🖼 <b>Сурет генерациясы</b>\n\nҚандай сурет жасағыңыз келетінін сипаттаңыз.\n\nМысалы:\n• <i>AI туралы пост үшін минималистік баннер</i>\n• <i>Киберпанк стиліндегі нейрожелі иллюстрациясы</i>\n• <i>Градиент пен мәтінмен stories фоны</i>");
     }
 
     if (text === "📸 Карусель по фото") {
       await setUserState(chatId, "awaiting_photo_for_carousel");
-      return sendMessage(chatId, "📸 <b>Карусель по фото</b>\n\nОтправьте мне фотографию, и я создам карусель-пост на её основе.\n\nAI проанализирует изображение и сгенерирует 7-10 слайдов с текстом.");
+      return sendMessage(chatId, "📸 <b>Фото бойынша карусель</b>\n\nМаған фотосурет жіберіңіз, мен оның негізінде карусель-пост жасаймын.\n\nAI суретті талдап, мәтінмен 5 слайд жасайды.");
     }
   }
 
   if (text === "📄 Загрузить документ") {
-    return sendMessage(chatId, "📄 <b>Загрузить документ</b>\n\nОтправьте мне документ (PDF, DOCX, TXT), и я извлеку из него полезную информацию для контента.", getMainKeyboard());
+    return sendMessage(chatId, "📄 <b>Құжат жүктеу</b>\n\nМаған құжат жіберіңіз (PDF, DOCX, TXT), мен одан контент үшін пайдалы ақпарат аламын.", getMainKeyboard());
   }
 
-  return sendMessage(chatId, "Используйте кнопки меню или отправьте /start", getMainKeyboard());
+  return sendMessage(chatId, "Мәзір батырмаларын қолданыңыз немесе /start жіберіңіз", getMainKeyboard());
 }
 
 serve(async (req) => {
