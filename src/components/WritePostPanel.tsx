@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PenLine, Trash2, Copy, Loader2, Newspaper, Lightbulb, BookOpen, GalleryHorizontal, FileText } from "lucide-react";
+import { PenLine, Trash2, Copy, Loader2, Newspaper, Lightbulb, BookOpen, GalleryHorizontal, FileText, Send, Instagram, Music } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -97,9 +97,42 @@ const WritePostPanel = () => {
                   {post.source && (
                     <p className="text-xs text-muted-foreground mt-2">📎 Көзі: {post.source}</p>
                   )}
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <Button variant="outline" size="sm" onClick={() => copyToClipboard(post.content)}>
                       <Copy className="h-3 w-3 mr-1" /> Көшіру
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[#0088cc] border-[#0088cc]/30 hover:bg-[#0088cc]/10"
+                      onClick={() => {
+                        copyToClipboard(post.content);
+                        window.open("https://web.telegram.org/", "_blank");
+                      }}
+                    >
+                      <Send className="h-3 w-3 mr-1" /> Telegram
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[#E1306C] border-[#E1306C]/30 hover:bg-[#E1306C]/10"
+                      onClick={() => {
+                        copyToClipboard(post.content);
+                        window.open("https://www.instagram.com/", "_blank");
+                      }}
+                    >
+                      <Instagram className="h-3 w-3 mr-1" /> Instagram
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-foreground border-border hover:bg-muted"
+                      onClick={() => {
+                        copyToClipboard(post.content);
+                        window.open("https://www.tiktok.com/", "_blank");
+                      }}
+                    >
+                      <Music className="h-3 w-3 mr-1" /> TikTok
                     </Button>
                     <Button
                       variant="ghost"
