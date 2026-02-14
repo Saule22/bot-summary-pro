@@ -166,6 +166,24 @@ export type Database = {
           },
         ]
       }
+      telegram_user_states: {
+        Row: {
+          action: string
+          created_at: string
+          telegram_chat_id: number
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          telegram_chat_id: number
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          telegram_chat_id?: number
+        }
+        Relationships: []
+      }
       telegram_users: {
         Row: {
           created_at: string
