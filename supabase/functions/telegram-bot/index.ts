@@ -126,6 +126,21 @@ async function generateImage(prompt: string): Promise<string | null> {
   return imageUrl || null;
 }
 
+// Save generated post to database
+async function savePost(userId: string, type: string, title: string, content: string, source?: string): Promise<void> {
+  try {
+    await supabase.from("generated_posts").insert({
+      user_id: userId,
+      type,
+      title,
+      content,
+      source: source || null,
+    });
+  } catch (err) {
+    console.error("Failed to save post:", err);
+  }
+}
+
 // State management via database (Edge Functions are stateless)
 async function getUserState(chatId: number): Promise<string | null> {
   const { data } = await supabase
@@ -182,6 +197,7 @@ async function generateFreshNews(chatId: number, userId: string): Promise<void> 
     return;
   }
 
+  await savePost(userId, "news", `Жаңалықтар: ${keywordList}`, news);
   await sendMessage(
     chatId,
     `📰 <b>Соңғы жаңалықтар</b>\n\n🔑 Кілт сөздер: <i>${keywordList}</i>\n📅 Күні: ${new Date().toLocaleDateString('kk-KZ')}\n\n${news}`,
@@ -210,6 +226,7 @@ async function generateContentIdeas(chatId: number, userId: string): Promise<voi
     return;
   }
 
+  await savePost(userId, "ideas", `Идеялар: ${keywordList}`, ideas);
   await sendMessage(
     chatId,
     `💡 <b>Контент идеялары</b>\n\n🔑 Кілт сөздер: <i>${keywordList}</i>\n\n${ideas}`,
@@ -250,6 +267,7 @@ async function generateStorytelling(chatId: number, userId: string): Promise<voi
     return;
   }
 
+  await savePost(userId, "storytelling", "Сторителлинг", story);
   await sendMessage(
     chatId,
     `📖 <b>Сторителлинг-пост</b>\n\n${story}`,
@@ -294,6 +312,7 @@ async function generateCarousel(chatId: number, userId: string): Promise<void> {
     return;
   }
 
+  await savePost(userId, "carousel", `Карусель: ${keywordList}`, carousel);
   await sendMessage(
     chatId,
     `🎠 <b>Карусель-пост</b>\n\n🔑 Тақырып: <i>${keywordList}</i>\n\n${carousel}`,
@@ -555,6 +574,7 @@ async function generatePostsFromDocument(chatId: number, userId: string, fileId:
 
   for (let i = 0; i < postList.length; i++) {
     await sendMessage(chatId, `📄 <b>Пост ${i + 1}/${postList.length}</b>\n\n${postList[i]}`);
+    await savePost(userId, "document", `Құжаттан пост ${i + 1}`, postList[i], fileName);
   }
 
   await sendMessage(chatId, "✅ Құжат негізінде посттар дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
