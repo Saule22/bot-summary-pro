@@ -129,7 +129,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   if (text === "/start") {
     return sendMessage(
       chatId,
-      "👋 Привет! Я AI Content Bot.\n\nВыберите действие:",
+      `👋 Привет! Я AI Content Bot.\n\n🔑 Ваш Chat ID: <code>${chatId}</code>\n\nСкопируйте его и вставьте в настройках приложения для привязки аккаунта.\n\nВыберите действие:`,
       getMainKeyboard()
     );
   }
