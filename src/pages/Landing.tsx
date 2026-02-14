@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import PricingSection from "@/components/landing/PricingSection";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Bot,
@@ -183,6 +184,9 @@ const Landing = () => {
         </blockquote>
         <p className="text-muted-foreground">— Контент-маркетолог, 500+ подписчиков</p>
       </section>
+
+      {/* Pricing */}
+      <PricingSection />
 
       {/* CTA */}
       <section className="border-t border-border/50">
