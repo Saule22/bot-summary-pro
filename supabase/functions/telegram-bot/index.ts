@@ -889,6 +889,65 @@ async function handleCallbackQuery(callbackQuery: { id: string; from: { id: numb
   }
 }
 
+// ===== CHANNEL POST HANDLER (auto-collect messages from channels) =====
+async function handleChannelPost(post: { chat: { id: number; title?: string; username?: string }; text?: string; caption?: string; date?: number }) {
+  const chatId = post.chat.id;
+  const chatUsername = post.chat.username;
+  const chatTitle = post.chat.title;
+  const text = post.text || post.caption || "";
+
+  if (!text || text.length < 5) return; // Skip empty or very short messages
+
+  try {
+    // Find all channels matching this chat username or title
+    let query = supabase.from("channels").select("id, user_id, name").eq("is_active", true);
+
+    // Match by username (preferred) or by name
+    if (chatUsername) {
+      query = query.or(`username.eq.${chatUsername},username.eq.@${chatUsername}`);
+    } else if (chatTitle) {
+      query = query.eq("name", chatTitle);
+    } else {
+      return;
+    }
+
+    const { data: channels, error } = await query;
+    if (error) {
+      console.error("Channel lookup error:", error);
+      return;
+    }
+
+    if (!channels || channels.length === 0) {
+      console.log(`No matching channel found for: ${chatUsername || chatTitle}`);
+      return;
+    }
+
+    // Save message for each user who tracks this channel
+    const messageDate = post.date ? new Date(post.date * 1000).toISOString() : new Date().toISOString();
+
+    for (const channel of channels) {
+      const { error: insertError } = await supabase.from("messages").insert({
+        channel_id: channel.id,
+        user_id: channel.user_id,
+        text,
+        message_date: messageDate,
+        source_url: chatUsername ? `https://t.me/${chatUsername}` : null,
+      });
+
+      if (insertError) {
+        // Skip duplicate messages (same text + channel + date)
+        if (insertError.code !== "23505") {
+          console.error(`Failed to save message for channel ${channel.name}:`, insertError);
+        }
+      } else {
+        console.log(`Saved message from ${chatUsername || chatTitle} for user ${channel.user_id}`);
+      }
+    }
+  } catch (err) {
+    console.error("handleChannelPost error:", err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -903,6 +962,15 @@ serve(async (req) => {
 
     if (update.callback_query) {
       await handleCallbackQuery(update.callback_query);
+    }
+
+    // Auto-collect messages from channels where bot is admin
+    if (update.channel_post) {
+      await handleChannelPost(update.channel_post);
+    }
+    if (update.edited_channel_post) {
+      // Optionally handle edited posts too
+      await handleChannelPost(update.edited_channel_post);
     }
 
     return new Response(JSON.stringify({ ok: true }), {
