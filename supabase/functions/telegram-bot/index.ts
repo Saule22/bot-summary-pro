@@ -450,6 +450,117 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
   await clearUserState(chatId);
 }
 
+async function generatePostsFromDocument(chatId: number, userId: string, fileId: string, fileName: string): Promise<void> {
+  await sendMessage(chatId, "📄 Құжатты жүктеп, талдап жатырмын... ⏳");
+
+  // Download file from Telegram
+  const fileRes = await fetch(`${TELEGRAM_API}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  const fileData = await fileRes.json();
+  const filePath = fileData.result?.file_path;
+
+  if (!filePath) {
+    await sendMessage(chatId, "❌ Құжатты жүктеу мүмкін болмады. Қайталап көріңіз.", getMainKeyboard());
+    await clearUserState(chatId);
+    return;
+  }
+
+  const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
+  const downloadRes = await fetch(fileUrl);
+  
+  let documentText = "";
+
+  if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
+    documentText = await downloadRes.text();
+  } else {
+    // For PDF/DOCX, read as binary and send to AI for extraction
+    const fileBytes = new Uint8Array(await downloadRes.arrayBuffer());
+    const base64File = btoa(String.fromCharCode(...fileBytes));
+    const mimeType = fileName.endsWith(".pdf") ? "application/pdf" : "application/octet-stream";
+
+    const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Осы құжаттан барлық мәтінді шығарып бер. Тек мәтін қайтар, ешқандай түсіндірме қосуға болмайды." },
+              { type: "file", file: { filename: fileName, data: base64File, mime_type: mimeType } },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
+      }),
+    });
+
+    if (!extractResponse.ok) {
+      console.error("Document extraction error:", extractResponse.status);
+      await sendMessage(chatId, "❌ Құжатты оқу мүмкін болмады. TXT немесе PDF форматында жіберіп көріңіз.", getMainKeyboard());
+      await clearUserState(chatId);
+      return;
+    }
+
+    const extractData = await extractResponse.json();
+    documentText = extractData.choices?.[0]?.message?.content || "";
+  }
+
+  if (!documentText || documentText.length < 20) {
+    await sendMessage(chatId, "❌ Құжатта жеткілікті мәтін табылмады.", getMainKeyboard());
+    await clearUserState(chatId);
+    return;
+  }
+
+  // Truncate to avoid token limits
+  const truncated = documentText.substring(0, 6000);
+
+  await sendMessage(chatId, "✍️ Құжат негізінде посттар жасап жатырмын...");
+
+  const keywordList = await getUserKeywords(userId);
+
+  const posts = await callAI(
+    `Сен кәсіби SMM-маман және контент-мейкерсің. Берілген құжат мәтіні негізінде Telegram/Instagram үшін 3 дайын пост жаз.
+
+Ережелер:
+- Әрбір пост өз алдына тұтас болуы керек (тақырып + мәтін + CTA)
+- Посттар бір-бірін қайталамауы керек
+- Ұзындығы: 500-1200 таңба әрқайсысы
+- Эмодзи қолдан, бірақ артық емес
+- Markdown қолданба, тек қарапайым мәтін
+- Кілт сөздерге байланысты контекст қос: ${keywordList}
+- Посттар арасында "---" қой
+
+МАҢЫЗДЫ: Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.`,
+    `Мына құжат мәтіні негізінде 3 пост жаз:\n\n${truncated}`,
+    0.8,
+    3000
+  );
+
+  if (!posts) {
+    await sendMessage(chatId, "❌ Посттарды жасау мүмкін болмады. Кейінірек қайталаңыз.", getMainKeyboard());
+    await clearUserState(chatId);
+    return;
+  }
+
+  const postList = posts.split("---").map(p => p.trim()).filter(p => p.length > 0);
+
+  for (let i = 0; i < postList.length; i++) {
+    await sendMessage(chatId, `📄 <b>Пост ${i + 1}/${postList.length}</b>\n\n${postList[i]}`);
+  }
+
+  await sendMessage(chatId, "✅ Құжат негізінде посттар дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
+  await clearUserState(chatId);
+}
+
 async function handleImageGeneration(chatId: number, prompt: string): Promise<void> {
   await sendMessage(chatId, "🖼 Сурет жасап жатырмын... ⏳");
 
@@ -483,7 +594,7 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
   await sendMessage(chatId, "✅ Дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
 }
 
-async function handleMessage(message: { chat: { id: number; username?: string }; text?: string; photo?: Array<{ file_id: string }> }) {
+async function handleMessage(message: { chat: { id: number; username?: string }; text?: string; photo?: Array<{ file_id: string }>; document?: { file_id: string; file_name?: string; mime_type?: string } }) {
   const chatId = message.chat.id;
   const text = message.text || "";
 
@@ -497,6 +608,24 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   }
 
   const currentAction = await getUserState(chatId);
+
+  // Handle document upload for document processing flow
+  if (message.document && currentAction === "awaiting_document") {
+    const userId = await getUserIdByChatId(chatId);
+    if (!userId) {
+      await sendMessage(chatId, "⚠️ Telegram-ді параметрлерде байланыстырыңыз. Сіздің Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
+      await clearUserState(chatId);
+      return;
+    }
+    const fileName = message.document.file_name || "document.txt";
+    const supported = [".pdf", ".txt", ".md", ".docx", ".doc"];
+    if (!supported.some(ext => fileName.toLowerCase().endsWith(ext))) {
+      await sendMessage(chatId, "❌ Бұл формат қолдау көрсетілмейді. PDF, DOCX немесе TXT жіберіңіз.", getMainKeyboard());
+      return;
+    }
+    await generatePostsFromDocument(chatId, userId, message.document.file_id, fileName);
+    return;
+  }
 
   // Handle photo message for carousel-from-photo flow
   if (message.photo && message.photo.length > 0 && currentAction === "awaiting_photo_for_carousel") {
@@ -525,7 +654,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   }
 
   // Commands that require auth
-  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение", "📸 Карусель по фото"];
+  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение", "📸 Карусель по фото", "📄 Загрузить документ"];
   
   if (authCommands.includes(text)) {
     const userId = await getUserIdByChatId(chatId);
@@ -556,10 +685,11 @@ async function handleMessage(message: { chat: { id: number; username?: string };
       await setUserState(chatId, "awaiting_photo_for_carousel");
       return sendMessage(chatId, "📸 <b>Фото бойынша карусель</b>\n\nМаған фотосурет жіберіңіз, мен оның негізінде карусель-пост жасаймын.\n\nAI суретті талдап, мәтінмен 5 слайд жасайды.");
     }
-  }
 
-  if (text === "📄 Загрузить документ") {
-    return sendMessage(chatId, "📄 <b>Құжат жүктеу</b>\n\nМаған құжат жіберіңіз (PDF, DOCX, TXT), мен одан контент үшін пайдалы ақпарат аламын.", getMainKeyboard());
+    if (text === "📄 Загрузить документ") {
+      await setUserState(chatId, "awaiting_document");
+      return sendMessage(chatId, "📄 <b>Құжат жүктеу</b>\n\nМаған құжат жіберіңіз (PDF, DOCX, TXT), мен одан 3 дайын пост жасаймын.\n\n📎 Файлды тікелей чатқа жіберіңіз.");
+    }
   }
 
   return sendMessage(chatId, "Мәзір батырмаларын қолданыңыз немесе /start жіберіңіз", getMainKeyboard());
