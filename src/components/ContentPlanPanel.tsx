@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,8 @@ import {
   GripVertical,
   Trash2,
   Edit,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +48,8 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 
+const TELEGRAM_CHANNEL_ID = "-1001143818214";
+
 interface ContentPlan {
   id: string;
   user_id: string;
@@ -56,7 +60,7 @@ interface ContentPlan {
   sort_order: number;
 }
 
-function DraggablePost({ post, onEdit, onDelete }: { post: ContentPlan; onEdit: () => void; onDelete: () => void }) {
+function DraggablePost({ post, onEdit, onDelete, onPostToTelegram, isPostingToTelegram }: { post: ContentPlan; onEdit: () => void; onDelete: () => void; onPostToTelegram: (post: ContentPlan) => void; isPostingToTelegram: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: post.id,
     data: post,
@@ -95,6 +99,14 @@ function DraggablePost({ post, onEdit, onDelete }: { post: ContentPlan; onEdit: 
         </Badge>
       </div>
       <div className="hidden group-hover:flex gap-0.5 shrink-0">
+        <button
+          onClick={() => onPostToTelegram(post)}
+          disabled={isPostingToTelegram}
+          className="text-[#0088cc] hover:text-[#0088cc]/80 p-0.5 disabled:opacity-50"
+          title="Telegram-ға жіберу"
+        >
+          {isPostingToTelegram ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+        </button>
         <button onClick={onEdit} className="text-muted-foreground hover:text-foreground p-0.5">
           <Edit className="h-3 w-3" />
         </button>
@@ -112,12 +124,16 @@ function DroppableDay({
   onAddPost,
   onEditPost,
   onDeletePost,
+  onPostToTelegram,
+  postingToTelegramId,
 }: {
   date: Date;
   posts: ContentPlan[];
   onAddPost: (date: Date) => void;
   onEditPost: (post: ContentPlan) => void;
   onDeletePost: (id: string) => void;
+  onPostToTelegram: (post: ContentPlan) => void;
+  postingToTelegramId: string | null;
 }) {
   const dateStr = format(date, "yyyy-MM-dd");
   const { setNodeRef, isOver } = useDroppable({ id: dateStr });
@@ -157,6 +173,8 @@ function DroppableDay({
             post={post}
             onEdit={() => onEditPost(post)}
             onDelete={() => onDeletePost(post.id)}
+            onPostToTelegram={onPostToTelegram}
+            isPostingToTelegram={postingToTelegramId === post.id}
           />
         ))}
       </div>
@@ -174,6 +192,28 @@ const ContentPlanPanel = () => {
   const [formContent, setFormContent] = useState("");
   const [formStatus, setFormStatus] = useState("draft");
   const [activePost, setActivePost] = useState<ContentPlan | null>(null);
+  const [postingToTelegramId, setPostingToTelegramId] = useState<string | null>(null);
+
+  const postToTelegram = useCallback(async (post: ContentPlan) => {
+    const text = post.content ? `<b>${post.title}</b>\n\n${post.content}` : post.title;
+    setPostingToTelegramId(post.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("post-to-telegram", {
+        body: { text, chat_id: TELEGRAM_CHANNEL_ID },
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      // Update status to published
+      await supabase.from("content_plans").update({ status: "published" }).eq("id", post.id);
+      queryClient.invalidateQueries({ queryKey: ["content-plans"] });
+      toast.success("Пост Telegram каналға жарияланды! ✅");
+    } catch (err: any) {
+      console.error("Telegram post error:", err);
+      toast.error("Қате: " + (err.message || "Telegram-ға жіберу сәтсіз"));
+    } finally {
+      setPostingToTelegramId(null);
+    }
+  }, [queryClient]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -322,6 +362,8 @@ const ContentPlanPanel = () => {
               onAddPost={openAddDialog}
               onEditPost={openEditDialog}
               onDeletePost={(id) => deleteMutation.mutate(id)}
+              onPostToTelegram={postToTelegram}
+              postingToTelegramId={postingToTelegramId}
             />
           ))}
         </div>
