@@ -107,7 +107,7 @@ const WritePostPanel = () => {
                       className="text-[#0088cc] border-[#0088cc]/30 hover:bg-[#0088cc]/10"
                       onClick={() => {
                         copyToClipboard(post.content);
-                        window.open("https://web.telegram.org/", "_blank");
+                        window.open("https://t.me/+RC1H5smJT9ESiebx", "_blank");
                       }}
                     >
                       <Send className="h-3 w-3 mr-1" /> Telegram
