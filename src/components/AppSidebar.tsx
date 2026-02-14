@@ -6,6 +6,10 @@ import {
   MessageSquare,
   CalendarDays,
   Palette,
+  PenLine,
+  BookOpen,
+  Search,
+  Settings,
   Bot,
   LogOut,
 } from "lucide-react";
@@ -27,12 +31,16 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "Дашборд", url: "/", icon: LayoutDashboard },
+  { title: "Написать пост", url: "/write-post", icon: PenLine },
   { title: "Каналы", url: "/channels", icon: Radio },
   { title: "Ключевые слова", url: "/keywords", icon: Tag },
+  { title: "Источники", url: "/sources", icon: BookOpen },
+  { title: "Найти информацию", url: "/find-info", icon: Search },
   { title: "Дайджест", url: "/digest", icon: Sparkles },
   { title: "Сообщения", url: "/messages", icon: MessageSquare },
   { title: "Контент-план", url: "/content-plan", icon: CalendarDays },
   { title: "Мой стиль", url: "/my-style", icon: Palette },
+  { title: "Настройки", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
