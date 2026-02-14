@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+const TELEGRAM_CHANNEL_ID = "-100399726302";
 
 const typeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   news: { label: "Жаңалықтар", icon: Newspaper, color: "bg-blue-500/10 text-blue-600" },
@@ -48,6 +51,25 @@ const WritePostPanel = () => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Көшірілді!");
+  };
+
+  const [postingToTelegram, setPostingToTelegram] = useState<string | null>(null);
+
+  const postToTelegram = async (postId: string, content: string) => {
+    setPostingToTelegram(postId);
+    try {
+      const { data, error } = await supabase.functions.invoke("post-to-telegram", {
+        body: { text: content, chat_id: TELEGRAM_CHANNEL_ID },
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      toast.success("Пост жарияланды Telegram каналға! ✅");
+    } catch (err: any) {
+      console.error("Telegram post error:", err);
+      toast.error("Қате: " + (err.message || "Telegram-ға жіберу сәтсіз"));
+    } finally {
+      setPostingToTelegram(null);
+    }
   };
 
   return (
@@ -105,12 +127,15 @@ const WritePostPanel = () => {
                       variant="outline"
                       size="sm"
                       className="text-[#0088cc] border-[#0088cc]/30 hover:bg-[#0088cc]/10"
-                      onClick={() => {
-                        copyToClipboard(post.content);
-                        window.open("https://t.me/+RC1H5smJT9ESiebx", "_blank");
-                      }}
+                      disabled={postingToTelegram === post.id}
+                      onClick={() => postToTelegram(post.id, post.content)}
                     >
-                      <Send className="h-3 w-3 mr-1" /> Telegram
+                      {postingToTelegram === post.id ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3 mr-1" />
+                      )}
+                      Telegram
                     </Button>
                     <Button
                       variant="outline"
