@@ -13,6 +13,10 @@ import DigestPanel from "./components/DigestPanel";
 import MessagesPanel from "./components/MessagesPanel";
 import ContentPlanPanel from "./components/ContentPlanPanel";
 import MyStylePanel from "./components/MyStylePanel";
+import WritePostPanel from "./components/WritePostPanel";
+import SourcesPanel from "./components/SourcesPanel";
+import FindInfoPanel from "./components/FindInfoPanel";
+import SettingsPanel from "./components/SettingsPanel";
 
 const queryClient = new QueryClient();
 
@@ -26,12 +30,16 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<DashboardPanel />} />
+            <Route path="/write-post" element={<WritePostPanel />} />
             <Route path="/channels" element={<ChannelsPanel />} />
             <Route path="/keywords" element={<KeywordsPanel />} />
+            <Route path="/sources" element={<SourcesPanel />} />
+            <Route path="/find-info" element={<FindInfoPanel />} />
             <Route path="/digest" element={<DigestPanel />} />
             <Route path="/messages" element={<MessagesPanel />} />
             <Route path="/content-plan" element={<ContentPlanPanel />} />
             <Route path="/my-style" element={<MyStylePanel />} />
+            <Route path="/settings" element={<SettingsPanel />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
