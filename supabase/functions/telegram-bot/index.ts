@@ -47,7 +47,7 @@ function getMainKeyboard() {
     keyboard: [
       [{ text: "📰 Свежие Новости" }, { text: "💡 Идеи для контента" }],
       [{ text: "📖 Сторителлинг" }, { text: "🎠 Карусель" }],
-      [{ text: "🖼 Сгенерировать изображение" }],
+      [{ text: "🖼 Сгенерировать изображение" }, { text: "📸 Карусель по фото" }],
       [{ text: "📄 Загрузить документ" }],
     ],
     resize_keyboard: true,
@@ -127,7 +127,7 @@ async function generateImage(prompt: string): Promise<string | null> {
 }
 
 // Store user state for multi-step flows
-const userStates = new Map<number, { action: string }>();
+const userStates = new Map<number, { action: string; photoFileId?: string }>();
 
 async function generateContentIdeas(chatId: number, userId: string): Promise<void> {
   await sendMessage(chatId, "💡 Генерирую идеи для контента... ⏳");
@@ -236,6 +236,97 @@ async function generateCarousel(chatId: number, userId: string): Promise<void> {
   );
 }
 
+async function getPhotoUrl(fileId: string): Promise<string | null> {
+  const res = await fetch(`${TELEGRAM_API}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  const data = await res.json();
+  const filePath = data.result?.file_path;
+  if (!filePath) return null;
+  return `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
+}
+
+async function generateCarouselFromPhoto(chatId: number, userId: string, photoFileId: string): Promise<void> {
+  await sendMessage(chatId, "📸 Анализирую фото и создаю карусель... ⏳");
+
+  const photoUrl = await getPhotoUrl(photoFileId);
+  if (!photoUrl) {
+    await sendMessage(chatId, "❌ Не удалось загрузить фото. Попробуйте ещё раз.", getMainKeyboard());
+    return;
+  }
+
+  const keywordList = await getUserKeywords(userId);
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        {
+          role: "system",
+          content: `Ты эксперт по созданию карусельного контента для соцсетей.
+
+На основе присланного фото создай текстовую карусель из 7-10 слайдов.
+Фото — это основа контента. Опиши что на нём, и построй карусель вокруг этой темы.
+
+Формат каждого слайда:
+📌 Слайд N: [Заголовок]
+[Текст слайда — 2-3 коротких предложения]
+
+Структура:
+- Слайд 1: Цепляющий заголовок-обложка
+- Слайды 2-8: Основной контент, связанный с фото
+- Предпоследний слайд: Резюме
+- Последний слайд: Призыв к действию
+
+Правила:
+- Не используй markdown, только текст с эмодзи
+- Нумеруй слайды
+- Учти ключевые слова пользователя: ${keywordList}`,
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Создай карусель на основе этого фото" },
+            { type: "image_url", image_url: { url: photoUrl } },
+          ],
+        },
+      ],
+      temperature: 0.8,
+      max_tokens: 2500,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("AI carousel from photo error:", response.status, await response.text());
+    await sendMessage(chatId, "❌ Не удалось создать карусель по фото. Попробуйте позже.", getMainKeyboard());
+    userStates.delete(chatId);
+    return;
+  }
+
+  const data = await response.json();
+  const carousel = data.choices?.[0]?.message?.content;
+
+  if (!carousel) {
+    await sendMessage(chatId, "❌ Не удалось получить ответ от AI.", getMainKeyboard());
+    userStates.delete(chatId);
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📸 <b>Карусель по фото</b>\n\n${carousel}`,
+    getMainKeyboard()
+  );
+  userStates.delete(chatId);
+}
+
 async function handleImageGeneration(chatId: number, prompt: string): Promise<void> {
   await sendMessage(chatId, "🖼 Генерирую изображение... ⏳");
 
@@ -269,7 +360,7 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
   await sendMessage(chatId, "✅ Готово! Выберите следующее действие:", getMainKeyboard());
 }
 
-async function handleMessage(message: { chat: { id: number; username?: string }; text?: string }) {
+async function handleMessage(message: { chat: { id: number; username?: string }; text?: string; photo?: Array<{ file_id: string }> }) {
   const chatId = message.chat.id;
   const text = message.text || "";
 
@@ -282,8 +373,23 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     );
   }
 
-  // Check if user is in image generation flow
   const state = userStates.get(chatId);
+
+  // Handle photo message for carousel-from-photo flow
+  if (message.photo && message.photo.length > 0 && state?.action === "awaiting_photo_for_carousel") {
+    const userId = await getUserIdByChatId(chatId);
+    if (!userId) {
+      await sendMessage(chatId, "⚠️ Привяжите Telegram в настройках. Ваш Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
+      userStates.delete(chatId);
+      return;
+    }
+    // Take the highest resolution photo (last in array)
+    const photoFileId = message.photo[message.photo.length - 1].file_id;
+    await generateCarouselFromPhoto(chatId, userId, photoFileId);
+    return;
+  }
+
+  // Check if user is in image generation flow
   if (state?.action === "awaiting_image_prompt") {
     const userId = await getUserIdByChatId(chatId);
     if (!userId) {
@@ -296,7 +402,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   }
 
   // Commands that require auth
-  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение"];
+  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение", "📸 Карусель по фото"];
   
   if (authCommands.includes(text)) {
     const userId = await getUserIdByChatId(chatId);
@@ -310,50 +416,29 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     }
 
     if (text === "📰 Свежие Новости") {
-      return sendMessage(
-        chatId,
-        "📰 <b>Свежие Новости</b>\n\nФункция сбора новостей в разработке. Скоро здесь появятся актуальные новости по вашим ключевым словам!",
-        getMainKeyboard()
-      );
+      return sendMessage(chatId, "📰 <b>Свежие Новости</b>\n\nФункция сбора новостей в разработке.", getMainKeyboard());
     }
 
-    if (text === "💡 Идеи для контента") {
-      await generateContentIdeas(chatId, userId);
-      return;
-    }
-
-    if (text === "📖 Сторителлинг") {
-      await generateStorytelling(chatId, userId);
-      return;
-    }
-
-    if (text === "🎠 Карусель") {
-      await generateCarousel(chatId, userId);
-      return;
-    }
+    if (text === "💡 Идеи для контента") { await generateContentIdeas(chatId, userId); return; }
+    if (text === "📖 Сторителлинг") { await generateStorytelling(chatId, userId); return; }
+    if (text === "🎠 Карусель") { await generateCarousel(chatId, userId); return; }
 
     if (text === "🖼 Сгенерировать изображение") {
       userStates.set(chatId, { action: "awaiting_image_prompt" });
-      return sendMessage(
-        chatId,
-        "🖼 <b>Генерация изображения</b>\n\nОпишите, какое изображение вы хотите создать.\n\nНапример:\n• <i>Минималистичный баннер для поста про AI</i>\n• <i>Яркая иллюстрация нейросети в стиле киберпанк</i>\n• <i>Фон для stories с градиентом и текстом</i>"
-      );
+      return sendMessage(chatId, "🖼 <b>Генерация изображения</b>\n\nОпишите, какое изображение вы хотите создать.\n\nНапример:\n• <i>Минималистичный баннер для поста про AI</i>\n• <i>Яркая иллюстрация нейросети в стиле киберпанк</i>\n• <i>Фон для stories с градиентом и текстом</i>");
+    }
+
+    if (text === "📸 Карусель по фото") {
+      userStates.set(chatId, { action: "awaiting_photo_for_carousel" });
+      return sendMessage(chatId, "📸 <b>Карусель по фото</b>\n\nОтправьте мне фотографию, и я создам карусель-пост на её основе.\n\nAI проанализирует изображение и сгенерирует 7-10 слайдов с текстом.");
     }
   }
 
   if (text === "📄 Загрузить документ") {
-    return sendMessage(
-      chatId,
-      "📄 <b>Загрузить документ</b>\n\nОтправьте мне документ (PDF, DOCX, TXT), и я извлеку из него полезную информацию для контента.",
-      getMainKeyboard()
-    );
+    return sendMessage(chatId, "📄 <b>Загрузить документ</b>\n\nОтправьте мне документ (PDF, DOCX, TXT), и я извлеку из него полезную информацию для контента.", getMainKeyboard());
   }
 
-  return sendMessage(
-    chatId,
-    "Используйте кнопки меню или отправьте /start",
-    getMainKeyboard()
-  );
+  return sendMessage(chatId, "Используйте кнопки меню или отправьте /start", getMainKeyboard());
 }
 
 serve(async (req) => {
