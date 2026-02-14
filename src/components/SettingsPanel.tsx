@@ -234,7 +234,7 @@ const SettingsPanel = () => {
                       </FormControl>
                       <FormMessage />
                       <p className="text-xs text-muted-foreground mt-2">
-                        Напишите боту /start, чтобы узнать ваш Chat ID
+                        Откройте бота в Telegram и отправьте команду <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/start</code> — бот покажет ваш Chat ID. Скопируйте его и вставьте выше.
                       </p>
                     </FormItem>
                   )}
