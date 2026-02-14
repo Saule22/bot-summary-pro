@@ -53,11 +53,12 @@ const DigestPanel = () => {
 
       const data = await resp.json();
       if (!resp.ok) {
-        if (resp.status === 404) {
-          toast.info(data.error || "Сообщений не найдено за выбранный период");
-          return;
-        }
         throw new Error(data.error || "Ошибка генерации");
+      }
+
+      if (data.empty) {
+        toast.info(data.message || "Нет сообщений за выбранный период");
+        return;
       }
 
       toast.success("Дайджест создан!");
