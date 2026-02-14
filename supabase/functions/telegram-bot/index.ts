@@ -126,8 +126,28 @@ async function generateImage(prompt: string): Promise<string | null> {
   return imageUrl || null;
 }
 
-// Store user state for multi-step flows
-const userStates = new Map<number, { action: string; photoFileId?: string }>();
+// State management via database (Edge Functions are stateless)
+async function getUserState(chatId: number): Promise<string | null> {
+  const { data } = await supabase
+    .from("telegram_user_states")
+    .select("action")
+    .eq("telegram_chat_id", chatId)
+    .maybeSingle();
+  return data?.action || null;
+}
+
+async function setUserState(chatId: number, action: string): Promise<void> {
+  await supabase
+    .from("telegram_user_states")
+    .upsert({ telegram_chat_id: chatId, action }, { onConflict: "telegram_chat_id" });
+}
+
+async function clearUserState(chatId: number): Promise<void> {
+  await supabase
+    .from("telegram_user_states")
+    .delete()
+    .eq("telegram_chat_id", chatId);
+}
 
 async function generateContentIdeas(chatId: number, userId: string): Promise<void> {
   await sendMessage(chatId, "💡 Генерирую идеи для контента... ⏳");
@@ -306,7 +326,7 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
   if (!response.ok) {
     console.error("AI carousel from photo error:", response.status, await response.text());
     await sendMessage(chatId, "❌ Не удалось создать карусель по фото. Попробуйте позже.", getMainKeyboard());
-    userStates.delete(chatId);
+    await clearUserState(chatId);
     return;
   }
 
@@ -315,7 +335,7 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
 
   if (!carousel) {
     await sendMessage(chatId, "❌ Не удалось получить ответ от AI.", getMainKeyboard());
-    userStates.delete(chatId);
+    await clearUserState(chatId);
     return;
   }
 
@@ -324,7 +344,7 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
     `📸 <b>Карусель по фото</b>\n\n${carousel}`,
     getMainKeyboard()
   );
-  userStates.delete(chatId);
+  await clearUserState(chatId);
 }
 
 async function handleImageGeneration(chatId: number, prompt: string): Promise<void> {
@@ -356,7 +376,7 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
     await sendPhoto(chatId, imageUrl, `🖼 Изображение по запросу: "${prompt}"`);
   }
 
-  userStates.delete(chatId);
+  await clearUserState(chatId);
   await sendMessage(chatId, "✅ Готово! Выберите следующее действие:", getMainKeyboard());
 }
 
@@ -365,7 +385,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   const text = message.text || "";
 
   if (text === "/start") {
-    userStates.delete(chatId);
+    await clearUserState(chatId);
     return sendMessage(
       chatId,
       `👋 Привет! Я AI Content Bot.\n\n🔑 Ваш Chat ID: <code>${chatId}</code>\n\nСкопируйте его и вставьте в настройках приложения для привязки аккаунта.\n\nВыберите действие:`,
@@ -373,14 +393,14 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     );
   }
 
-  const state = userStates.get(chatId);
+  const currentAction = await getUserState(chatId);
 
   // Handle photo message for carousel-from-photo flow
-  if (message.photo && message.photo.length > 0 && state?.action === "awaiting_photo_for_carousel") {
+  if (message.photo && message.photo.length > 0 && currentAction === "awaiting_photo_for_carousel") {
     const userId = await getUserIdByChatId(chatId);
     if (!userId) {
       await sendMessage(chatId, "⚠️ Привяжите Telegram в настройках. Ваш Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
-      userStates.delete(chatId);
+      await clearUserState(chatId);
       return;
     }
     // Take the highest resolution photo (last in array)
@@ -390,11 +410,11 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   }
 
   // Check if user is in image generation flow
-  if (state?.action === "awaiting_image_prompt") {
+  if (currentAction === "awaiting_image_prompt") {
     const userId = await getUserIdByChatId(chatId);
     if (!userId) {
       await sendMessage(chatId, "⚠️ Привяжите Telegram в настройках. Ваш Chat ID: <code>" + chatId + "</code>", getMainKeyboard());
-      userStates.delete(chatId);
+      await clearUserState(chatId);
       return;
     }
     await handleImageGeneration(chatId, text);
@@ -424,12 +444,12 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     if (text === "🎠 Карусель") { await generateCarousel(chatId, userId); return; }
 
     if (text === "🖼 Сгенерировать изображение") {
-      userStates.set(chatId, { action: "awaiting_image_prompt" });
+      await setUserState(chatId, "awaiting_image_prompt");
       return sendMessage(chatId, "🖼 <b>Генерация изображения</b>\n\nОпишите, какое изображение вы хотите создать.\n\nНапример:\n• <i>Минималистичный баннер для поста про AI</i>\n• <i>Яркая иллюстрация нейросети в стиле киберпанк</i>\n• <i>Фон для stories с градиентом и текстом</i>");
     }
 
     if (text === "📸 Карусель по фото") {
-      userStates.set(chatId, { action: "awaiting_photo_for_carousel" });
+      await setUserState(chatId, "awaiting_photo_for_carousel");
       return sendMessage(chatId, "📸 <b>Карусель по фото</b>\n\nОтправьте мне фотографию, и я создам карусель-пост на её основе.\n\nAI проанализирует изображение и сгенерирует 7-10 слайдов с текстом.");
     }
   }
