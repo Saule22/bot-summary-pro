@@ -129,7 +129,7 @@ const WritePostPanel = () => {
                       className="text-foreground border-border hover:bg-muted"
                       onClick={() => {
                         copyToClipboard(post.content);
-                        window.open("https://www.tiktok.com/", "_blank");
+                        window.open("https://www.tiktok.com/@online_business8", "_blank");
                       }}
                     >
                       <Music className="h-3 w-3 mr-1" /> TikTok
