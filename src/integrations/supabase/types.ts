@@ -107,6 +107,36 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_posts: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          source: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          source?: string | null
+          title?: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          source?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       keywords: {
         Row: {
           created_at: string
