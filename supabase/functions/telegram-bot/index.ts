@@ -149,6 +149,46 @@ async function clearUserState(chatId: number): Promise<void> {
     .eq("telegram_chat_id", chatId);
 }
 
+async function generateFreshNews(chatId: number, userId: string): Promise<void> {
+  await sendMessage(chatId, "📰 Соңғы жаңалықтарды іздеп жатырмын... ⏳");
+  const keywordList = await getUserKeywords(userId);
+
+  const news = await callAI(
+    `Сен жаңалықтар жинау бойынша сарапшысың. Пайдаланушының кілт сөздері бойынша соңғы және өзекті жаңалықтарды тап.
+
+Ережелер:
+- Соңғы 1-7 күндегі жаңалықтарды іздеп, нақты және шынайы ақпарат бер
+- 5-7 жаңалық тап
+- Әрбір жаңалық үшін:
+  • Тақырып (қысқа, нақты)
+  • Қысқаша мазмұны (2-3 сөйлем)
+  • Неліктен маңызды екенін түсіндір (1 сөйлем)
+- Нөмірленген тізім форматында жаз
+- Эмодзи қолдан (📌, 🔥, 💡, 📊, 🌍, ⚡)
+- Markdown қолданба, тек қарапайым мәтін
+- Соңында қорытынды жаз: бұл жаңалықтар контент үшін қалай пайдалы
+
+МАҢЫЗДЫ: Барлық мәтін ҚАЗАҚ тілінде болуы керек, грамматикалық қатесіз.
+МАҢЫЗДЫ: Тек нақты, шынайы жаңалықтар бер. Ойдан шығарма.`,
+    `Осы кілт сөздер бойынша соңғы жаңалықтарды тап: ${keywordList}
+
+Бүгінгі күн: ${new Date().toISOString().split('T')[0]}`,
+    0.3,
+    2500
+  );
+
+  if (!news) {
+    await sendMessage(chatId, "❌ Жаңалықтарды жинау мүмкін болмады. Кейінірек қайталап көріңіз.", getMainKeyboard());
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📰 <b>Соңғы жаңалықтар</b>\n\n🔑 Кілт сөздер: <i>${keywordList}</i>\n📅 Күні: ${new Date().toLocaleDateString('kk-KZ')}\n\n${news}`,
+    getMainKeyboard()
+  );
+}
+
 async function generateContentIdeas(chatId: number, userId: string): Promise<void> {
   await sendMessage(chatId, "💡 Контент идеяларын жасап жатырмын... ⏳");
   const keywordList = await getUserKeywords(userId);
@@ -499,7 +539,8 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     }
 
     if (text === "📰 Свежие Новости") {
-      return sendMessage(chatId, "📰 <b>Соңғы Жаңалықтар</b>\n\nЖаңалықтар жинау функциясы әзірленуде.", getMainKeyboard());
+      await generateFreshNews(chatId, userId);
+      return;
     }
 
     if (text === "💡 Идеи для контента") { await generateContentIdeas(chatId, userId); return; }
