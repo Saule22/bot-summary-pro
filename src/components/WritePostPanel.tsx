@@ -118,7 +118,7 @@ const WritePostPanel = () => {
                       className="text-[#E1306C] border-[#E1306C]/30 hover:bg-[#E1306C]/10"
                       onClick={() => {
                         copyToClipboard(post.content);
-                        window.open("https://www.instagram.com/", "_blank");
+                        window.open("https://www.instagram.com/saule__abisheva/", "_blank");
                       }}
                     >
                       <Instagram className="h-3 w-3 mr-1" /> Instagram
