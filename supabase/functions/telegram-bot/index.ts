@@ -48,10 +48,22 @@ function getMainKeyboard() {
       [{ text: "📰 Свежие Новости" }, { text: "💡 Идеи для контента" }],
       [{ text: "📖 Сторителлинг" }, { text: "🎠 Карусель" }],
       [{ text: "🖼 Сгенерировать изображение" }, { text: "📸 Карусель по фото" }],
-      [{ text: "📄 Загрузить документ" }],
+      [{ text: "📄 Загрузить документ" }, { text: "📋 Дайджест" }],
     ],
     resize_keyboard: true,
     one_time_keyboard: false,
+  };
+}
+
+function getDigestPeriodKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📅 Күн", callback_data: "digest_day" },
+        { text: "📆 Апта", callback_data: "digest_week" },
+        { text: "🗓 Ай", callback_data: "digest_month" },
+      ],
+    ],
   };
 }
 
@@ -162,6 +174,144 @@ async function clearUserState(chatId: number): Promise<void> {
     .from("telegram_user_states")
     .delete()
     .eq("telegram_chat_id", chatId);
+}
+
+// ===== DIGEST GENERATION =====
+async function generateDigest(chatId: number, userId: string, period: string): Promise<void> {
+  await sendMessage(chatId, "📋 Каналдардан хабарламаларды жинап, дайджест жасап жатырмын... ⏳");
+
+  const now = new Date();
+  let since: Date;
+  let periodLabel: string;
+  if (period === "week") {
+    since = new Date(now.getTime() - 7 * 86400000);
+    periodLabel = "апта";
+  } else if (period === "month") {
+    since = new Date(now.getTime() - 30 * 86400000);
+    periodLabel = "ай";
+  } else {
+    since = new Date(now.getTime() - 86400000);
+    periodLabel = "күн";
+  }
+
+  // Get user's channels
+  const { data: channels } = await supabase
+    .from("channels")
+    .select("id, name")
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (!channels || channels.length === 0) {
+    await sendMessage(chatId, "⚠️ Сізде бақылау арналары жоқ. Алдымен веб-қосымшада арналар қосыңыз.", getMainKeyboard());
+    return;
+  }
+
+  // Get messages from user's channels for the period
+  const channelIds = channels.map((c: any) => c.id);
+  const { data: messages } = await supabase
+    .from("messages")
+    .select("text, channel_id")
+    .in("channel_id", channelIds)
+    .gte("message_date", since.toISOString())
+    .order("message_date", { ascending: false })
+    .limit(100);
+
+  // Get user's keywords for filtering
+  const { data: keywords } = await supabase
+    .from("keywords")
+    .select("word")
+    .eq("user_id", userId);
+
+  const keywordList = keywords?.map((k: any) => k.word) || [];
+
+  let filteredMessages = messages || [];
+  if (keywordList.length > 0) {
+    filteredMessages = filteredMessages.filter((m: any) =>
+      keywordList.some((kw: string) => m.text.toLowerCase().includes(kw.toLowerCase()))
+    );
+  }
+
+  if (filteredMessages.length === 0) {
+    await sendMessage(chatId, `📋 Таңдалған кезеңде (${periodLabel}) хабарламалар табылмады.\n\nКілт сөздер: ${keywordList.length > 0 ? keywordList.join(", ") : "барлығы"}`, getMainKeyboard());
+    return;
+  }
+
+  // Build channel name map
+  const channelMap: Record<string, string> = {};
+  channels.forEach((c: any) => { channelMap[c.id] = c.name; });
+
+  const messagesText = filteredMessages.map((m: any, i: number) =>
+    `${i + 1}. [${channelMap[m.channel_id] || "Арна"}]: ${m.text}`
+  ).join("\n\n");
+
+  const digest = await callAI(
+    `Сен AI-ассистентсің, құрылымдалған жаңалық дайджесттерін жасайсың.
+
+Ережелер:
+- Қазақ тілінде жаз
+- Дайджест тақырыбын бер
+- Әр жаңалықтың қысқаша мазмұнын жаз (2-3 сөйлем)
+- Жаңалықтарды тақырыптар бойынша топтастыр
+- Эмодзи қолдан (📌, 🔥, 💡, 📊, ⚡)
+- Markdown қолданба, тек қарапайым мәтін
+- Соңында қорытынды жаз
+
+Формат:
+📋 [Дайджест тақырыбы]
+📅 Кезең: [кезең]
+
+[Жаңалықтар тізімі]
+
+📝 Қорытынды: [қысқаша қорытынды]`,
+    `${filteredMessages.length} хабарламадан дайджест жаса (кезең: ${periodLabel}):\n\n${messagesText}`,
+    0.4,
+    3000
+  );
+
+  if (!digest) {
+    await sendMessage(chatId, "❌ Дайджест жасау мүмкін болмады. Кейінірек қайталаңыз.", getMainKeyboard());
+    return;
+  }
+
+  // Save digest to database
+  try {
+    await supabase.from("digests").insert({
+      user_id: userId,
+      title: `Дайджест (${periodLabel})`,
+      content: digest,
+      language: "kk",
+      period,
+    });
+  } catch (err) {
+    console.error("Failed to save digest:", err);
+  }
+
+  // Split long messages for Telegram (max 4096 chars)
+  const header = `📋 <b>Дайджест</b>\n📅 Кезең: ${periodLabel} | 📨 ${filteredMessages.length} хабарлама | 📡 ${channels.length} арна\n${keywordList.length > 0 ? `🔑 Кілт сөздер: ${keywordList.join(", ")}\n` : ""}\n`;
+  const fullText = header + digest;
+
+  if (fullText.length > 4000) {
+    // Split into chunks
+    const chunks: string[] = [];
+    let remaining = fullText;
+    while (remaining.length > 0) {
+      if (remaining.length <= 4000) {
+        chunks.push(remaining);
+        break;
+      }
+      let splitAt = remaining.lastIndexOf("\n", 4000);
+      if (splitAt < 500) splitAt = 4000;
+      chunks.push(remaining.substring(0, splitAt));
+      remaining = remaining.substring(splitAt);
+    }
+    for (const chunk of chunks) {
+      await sendMessage(chatId, chunk);
+    }
+  } else {
+    await sendMessage(chatId, fullText);
+  }
+
+  await sendMessage(chatId, "✅ Дайджест дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
 }
 
 async function generateFreshNews(chatId: number, userId: string): Promise<void> {
@@ -343,7 +493,6 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
 
   const keywordList = await getUserKeywords(userId);
 
-  // Step 1: Generate carousel text structure (JSON) in Kazakh
   const structureResponse = await callAI(
     `Сен әлеуметтік желілерге карусель контент жасау бойынша сарапшысың.
 Пайдаланушының кілт сөздері негізінде 5 слайдтан тұратын карусель құрылымын жаса.
@@ -382,7 +531,6 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
     return;
   }
 
-  // Step 2: Generate image for each slide using the user's photo + text overlay
   await sendMessage(chatId, `📸 Фотоңызбен ${slides.length} слайд жасап жатырмын...`);
 
   for (let i = 0; i < slides.length; i++) {
@@ -433,7 +581,6 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
 
       if (!imageResponse.ok) {
         console.error(`Slide ${slideNum} generation error:`, imageResponse.status);
-        // Send text fallback for this slide
         await sendMessage(chatId, `📌 <b>Слайд ${slideNum}/${slides.length}: ${slide.title}</b>\n\n${slide.text}`);
         continue;
       }
@@ -472,7 +619,6 @@ async function generateCarouselFromPhoto(chatId: number, userId: string, photoFi
 async function generatePostsFromDocument(chatId: number, userId: string, fileId: string, fileName: string): Promise<void> {
   await sendMessage(chatId, "📄 Құжатты жүктеп, талдап жатырмын... ⏳");
 
-  // Download file from Telegram
   const fileRes = await fetch(`${TELEGRAM_API}/getFile`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -495,7 +641,6 @@ async function generatePostsFromDocument(chatId: number, userId: string, fileId:
   if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
     documentText = await downloadRes.text();
   } else {
-    // For PDF/DOCX, read as binary and send to AI for extraction
     const fileBytes = new Uint8Array(await downloadRes.arrayBuffer());
     const base64File = btoa(String.fromCharCode(...fileBytes));
     const mimeType = fileName.endsWith(".pdf") ? "application/pdf" : "application/octet-stream";
@@ -539,7 +684,6 @@ async function generatePostsFromDocument(chatId: number, userId: string, fileId:
     return;
   }
 
-  // Truncate to avoid token limits
   const truncated = documentText.substring(0, 6000);
 
   await sendMessage(chatId, "✍️ Құжат негізінде посттар жасап жатырмын...");
@@ -591,9 +735,7 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
     return;
   }
 
-  // For base64 images, we need to send as file upload
   if (imageUrl.startsWith("data:")) {
-    // Extract base64 data and send via Telegram
     const base64Data = imageUrl.split(",")[1];
     const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
@@ -614,6 +756,7 @@ async function handleImageGeneration(chatId: number, prompt: string): Promise<vo
   await sendMessage(chatId, "✅ Дайын! Келесі әрекетті таңдаңыз:", getMainKeyboard());
 }
 
+// ===== MAIN HANDLER =====
 async function handleMessage(message: { chat: { id: number; username?: string }; text?: string; photo?: Array<{ file_id: string }>; document?: { file_id: string; file_name?: string; mime_type?: string } }) {
   const chatId = message.chat.id;
   const text = message.text || "";
@@ -655,7 +798,6 @@ async function handleMessage(message: { chat: { id: number; username?: string };
       await clearUserState(chatId);
       return;
     }
-    // Take the highest resolution photo (last in array)
     const photoFileId = message.photo[message.photo.length - 1].file_id;
     await generateCarouselFromPhoto(chatId, userId, photoFileId);
     return;
@@ -674,7 +816,7 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   }
 
   // Commands that require auth
-  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение", "📸 Карусель по фото", "📄 Загрузить документ"];
+  const authCommands = ["📰 Свежие Новости", "💡 Идеи для контента", "📖 Сторителлинг", "🎠 Карусель", "🖼 Сгенерировать изображение", "📸 Карусель по фото", "📄 Загрузить документ", "📋 Дайджест"];
   
   if (authCommands.includes(text)) {
     const userId = await getUserIdByChatId(chatId);
@@ -696,6 +838,15 @@ async function handleMessage(message: { chat: { id: number; username?: string };
     if (text === "📖 Сторителлинг") { await generateStorytelling(chatId, userId); return; }
     if (text === "🎠 Карусель") { await generateCarousel(chatId, userId); return; }
 
+    if (text === "📋 Дайджест") {
+      await sendMessage(
+        chatId,
+        "📋 <b>Дайджест жасау</b>\n\nКаналдардан хабарламаларды жинап, AI дайджест жасаймын.\n\nКезеңді таңдаңыз:",
+        getDigestPeriodKeyboard()
+      );
+      return;
+    }
+
     if (text === "🖼 Сгенерировать изображение") {
       await setUserState(chatId, "awaiting_image_prompt");
       return sendMessage(chatId, "🖼 <b>Сурет генерациясы</b>\n\nҚандай сурет жасағыңыз келетінін сипаттаңыз.\n\nМысалы:\n• <i>AI туралы пост үшін минималистік баннер</i>\n• <i>Киберпанк стиліндегі нейрожелі иллюстрациясы</i>\n• <i>Градиент пен мәтінмен stories фоны</i>");
@@ -715,6 +866,29 @@ async function handleMessage(message: { chat: { id: number; username?: string };
   return sendMessage(chatId, "Мәзір батырмаларын қолданыңыз немесе /start жіберіңіз", getMainKeyboard());
 }
 
+// ===== CALLBACK QUERY HANDLER (for inline buttons) =====
+async function handleCallbackQuery(callbackQuery: { id: string; from: { id: number }; message?: { chat: { id: number } }; data?: string }) {
+  const chatId = callbackQuery.message?.chat?.id || callbackQuery.from.id;
+  const data = callbackQuery.data || "";
+
+  // Answer the callback to remove loading state
+  await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQuery.id }),
+  });
+
+  if (data.startsWith("digest_")) {
+    const period = data.replace("digest_", ""); // day, week, month
+    const userId = await getUserIdByChatId(chatId);
+    if (!userId) {
+      await sendMessage(chatId, "⚠️ Telegram аккаунтты байланыстырыңыз.", getMainKeyboard());
+      return;
+    }
+    await generateDigest(chatId, userId, period);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -725,6 +899,10 @@ serve(async (req) => {
 
     if (update.message) {
       await handleMessage(update.message);
+    }
+
+    if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
     }
 
     return new Response(JSON.stringify({ ok: true }), {
