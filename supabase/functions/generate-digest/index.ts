@@ -55,9 +55,9 @@ serve(async (req) => {
 
     if (filteredMessages.length === 0) {
       return new Response(JSON.stringify({
-        error: language === "kk" ? "Таңдалған кезең үшін хабарлар жоқ." : "Нет сообщений за выбранный период.",
+        message: language === "kk" ? "Таңдалған кезең үшін хабарлар жоқ." : "Нет сообщений за выбранный период.",
         empty: true,
-      }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const messagesText = filteredMessages.map((m: any, i: number) =>
