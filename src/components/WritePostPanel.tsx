@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const TELEGRAM_CHANNEL_ID = "-100399726302";
+const TELEGRAM_CHANNEL_ID = "-1001143818214";
 
 const typeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   news: { label: "Жаңалықтар", icon: Newspaper, color: "bg-blue-500/10 text-blue-600" },
