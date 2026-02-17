@@ -20,8 +20,8 @@ const plans = [
   },
 ];
 
-const KASPI_PHONE = "+7 7XX XXX XXXX"; // TODO: заменить на реальный номер
-const KASPI_NAME = "Имя Фамилия"; // TODO: заменить
+const KASPI_PHONE = "+7 771 794 7653";
+const KASPI_NAME = "Сауле Утеулиева";
 
 const TrialExpired = () => {
   const [selected, setSelected] = useState("pro");
