@@ -16,11 +16,20 @@ serve(async (req) => {
 
   try {
     const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot`;
+    const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
+
+    const webhookBody: Record<string, unknown> = {
+      url: webhookUrl,
+      allowed_updates: ["message", "callback_query", "channel_post", "edited_channel_post"],
+    };
+    if (WEBHOOK_SECRET) {
+      webhookBody.secret_token = WEBHOOK_SECRET;
+    }
 
     const response = await fetch(`${TELEGRAM_API}/setWebhook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message"] }),
+      body: JSON.stringify(webhookBody),
     });
 
     const data = await response.json();
