@@ -20,6 +20,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          type: string
           user_id: string
           username: string
         }
@@ -28,6 +29,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          type?: string
           user_id: string
           username: string
         }
@@ -36,6 +38,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          type?: string
           user_id?: string
           username?: string
         }
