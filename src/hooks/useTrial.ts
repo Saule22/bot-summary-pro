@@ -25,8 +25,16 @@ export const useTrial = () => {
       });
   }, [user]);
 
-  if (loading || !user || hasActiveSubscription === null) {
-    return { isExpired: false, daysLeft: TRIAL_DAYS, loading: loading || hasActiveSubscription === null };
+  if (loading) {
+    return { isExpired: false, daysLeft: TRIAL_DAYS, loading: true };
+  }
+
+  if (!user) {
+    return { isExpired: false, daysLeft: TRIAL_DAYS, loading: false };
+  }
+
+  if (hasActiveSubscription === null) {
+    return { isExpired: false, daysLeft: TRIAL_DAYS, loading: true };
   }
 
   if (hasActiveSubscription) {
