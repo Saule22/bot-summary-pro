@@ -12,19 +12,40 @@ serve(async (req) => {
   }
 
   try {
-    const { userId } = await req.json();
+    // Authenticate user from JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Create client with user's JWT - RLS will enforce access control
+    const supabase = createClient(supabaseUrl, supabaseAnon, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    // Получаем ключевые слова пользователя
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use authenticated user's ID — no longer trust client-supplied userId
+    const userId = user.id;
+
+    // Fetch user's keywords (RLS ensures only their own keywords)
     const { data: keywords, error: keywordsError } = await supabase
       .from("keywords")
       .select("word")
@@ -37,7 +58,7 @@ serve(async (req) => {
 
     const keywordList = keywords?.map((k) => k.word).join(", ") || "контент, новости";
 
-    // Генерируем идеи с помощью AI
+    // Generate ideas with AI
     const systemPrompt = `Ты эксперт по созданию контента. Придумай 5 интересных идей для постов на основе данных ключевых слов. 
     Каждая идея должна быть:
     - Оригинальной и привлекательной
@@ -107,7 +128,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Произошла ошибка при генерации идей. Попробуйте позже.",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
