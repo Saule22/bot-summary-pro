@@ -28,15 +28,25 @@ serve(async (req) => {
     // Service role for inserts (bypasses RLS)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user's active channels
-    const { data: channels, error: chErr } = await userSupabase
-      .from("channels")
-      .select("id, username, name")
-      .eq("is_active", true);
+    // Parse optional specific channelId from request body
+    let specificChannelId: string | null = null;
+    let specificChannelUsername: string | null = null;
+    try {
+      const body = await req.json();
+      specificChannelId = body.channelId || null;
+      specificChannelUsername = body.channelUsername || null;
+    } catch {}
+
+    // Get channels to process
+    let query = userSupabase.from("channels").select("id, username, name").eq("is_active", true);
+    if (specificChannelId) {
+      query = query.eq("id", specificChannelId);
+    }
+    const { data: channels, error: chErr } = await query;
 
     if (chErr) throw chErr;
     if (!channels || channels.length === 0) {
-      return new Response(JSON.stringify({ message: "Арналар табылмады", fetched: 0 }), {
+      return new Response(JSON.stringify({ message: "Арналар табылмады", count: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -106,7 +116,8 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      message: `${totalFetched} хабарлама жиналды`,
+      message: `${totalFetched} сообщений загружено`,
+      count: totalFetched,
       fetched: totalFetched,
       details: results,
     }), {

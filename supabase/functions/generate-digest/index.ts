@@ -31,12 +31,13 @@ serve(async (req) => {
     else if (period === "month") since = new Date(now.getTime() - 30 * 86400000);
     else since = new Date(now.getTime() - 86400000);
 
+    // Get messages from ALL channels (both own and source)
     const { data: messages } = await supabase
       .from("messages")
-      .select("text, channels(name)")
+      .select("text, channel_id, channels(name, type)")
       .gte("message_date", since.toISOString())
       .order("message_date", { ascending: false })
-      .limit(100);
+      .limit(200);
 
     // Get user's keywords
     const { data: keywords } = await supabase

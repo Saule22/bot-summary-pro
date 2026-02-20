@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,7 +33,7 @@ serve(async (req) => {
     if (!channels || channels.length === 0) {
       return new Response(JSON.stringify({
         empty: true,
-        message: "Добавьте каналы-источники в разделе 'Каналы' для поиска информации.",
+        message: "Добавьте каналы-источники в разделе 'Источники' для поиска информации.",
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -49,72 +48,112 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Scrape messages from source channels
-    const allMessages: Array<{ text: string; channel: string; date: string; url: string }> = [];
-    const threeDaysAgo = new Date(Date.now() - 3 * 86400000);
+    const channelIds = channels.map((c: any) => c.id);
+    const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
 
-    for (const channel of channels) {
-      const username = channel.username.replace(/^@/, "");
-      try {
-        const resp = await fetch(`https://t.me/s/${username}`, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-          },
-        });
+    // Search messages from DB (collected via fetch-channel-messages)
+    const { data: dbMessages } = await supabase
+      .from("messages")
+      .select("text, message_date, source_url, channel_id")
+      .in("channel_id", channelIds)
+      .gte("message_date", threeDaysAgo)
+      .order("message_date", { ascending: false })
+      .limit(200);
 
-        if (!resp.ok) continue;
+    const channelMap = Object.fromEntries(channels.map((c: any) => [c.id, c.name]));
 
-        const html = await resp.text();
-        const doc = new DOMParser().parseFromString(html, "text/html");
-        if (!doc) continue;
+    let allMessages: Array<{ text: string; channel: string; date: string; url: string }> = [];
 
-        const messageElements = doc.querySelectorAll(".tgme_widget_message_wrap");
+    // Filter DB messages by keywords
+    if (dbMessages && dbMessages.length > 0) {
+      const filtered = dbMessages.filter((m: any) =>
+        keywordList.some((kw: string) => m.text.toLowerCase().includes(kw.toLowerCase()))
+      );
+      allMessages = filtered.map((m: any) => ({
+        text: m.text.substring(0, 2000),
+        channel: channelMap[m.channel_id] || "Канал",
+        date: m.message_date,
+        url: m.source_url || "",
+      }));
+    }
 
-        for (const el of messageElements) {
-          const textEl = el.querySelector(".tgme_widget_message_text");
-          const dateEl = el.querySelector(".tgme_widget_message_date time");
-          const linkEl = el.querySelector(".tgme_widget_message_date");
+    // If not enough from DB, also try scraping
+    if (allMessages.length < 5) {
+      for (const channel of channels) {
+        const username = channel.username.replace(/^@/, "");
+        try {
+          const resp = await fetch(`https://t.me/s/${username}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml",
+              "Accept-Language": "ru-RU,ru;q=0.9",
+            },
+          });
 
-          const text = textEl?.textContent?.trim();
-          if (!text || text.length < 10) continue;
-
-          const datetime = dateEl?.getAttribute("datetime");
-          if (datetime && new Date(datetime) < threeDaysAgo) continue;
-
-          const sourceUrl = linkEl?.getAttribute("href") || `https://t.me/${username}`;
-
-          // Filter by keywords
-          const matchesKeyword = keywordList.some((kw: string) =>
-            text.toLowerCase().includes(kw.toLowerCase())
-          );
-
-          if (matchesKeyword) {
-            allMessages.push({
-              text: text.substring(0, 2000),
-              channel: channel.name,
-              date: datetime || new Date().toISOString(),
-              url: sourceUrl,
-            });
+          if (!resp.ok) {
+            console.log(`Scraping ${username} failed: ${resp.status}`);
+            continue;
           }
+
+          const html = await resp.text();
+
+          // Simple regex-based parsing (no DOMParser dependency)
+          const messageRegex = /<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g;
+          const dateRegex = /<time[^>]*datetime="([^"]+)"[^>]*>/g;
+          const urlRegex = /href="(https:\/\/t\.me\/[^/]+\/\d+)"/g;
+
+          const texts: string[] = [];
+          const dates: string[] = [];
+          const urls: string[] = [];
+
+          let m;
+          while ((m = messageRegex.exec(html)) !== null) {
+            // Strip HTML tags
+            const text = m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            if (text.length >= 10) texts.push(text.substring(0, 2000));
+          }
+          while ((m = dateRegex.exec(html)) !== null) dates.push(m[1]);
+          while ((m = urlRegex.exec(html)) !== null) urls.push(m[1]);
+
+          for (let i = 0; i < texts.length; i++) {
+            const date = dates[i] || new Date().toISOString();
+            if (new Date(date) < new Date(threeDaysAgo)) continue;
+            const text = texts[i];
+            const matchesKeyword = keywordList.some((kw: string) =>
+              text.toLowerCase().includes(kw.toLowerCase())
+            );
+            if (matchesKeyword) {
+              allMessages.push({
+                text,
+                channel: channel.name,
+                date,
+                url: urls[i] || `https://t.me/${username}`,
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`Error scraping ${username}:`, err);
         }
-      } catch (err) {
-        console.error(`Error scraping ${username}:`, err);
       }
     }
 
-    if (allMessages.length === 0) {
+    // Remove duplicates by text similarity
+    const uniqueMessages = allMessages.filter((msg, idx, arr) =>
+      arr.findIndex((m) => m.text.substring(0, 100) === msg.text.substring(0, 100)) === idx
+    );
+
+    if (uniqueMessages.length === 0) {
       return new Response(JSON.stringify({
         empty: true,
-        message: "За последние 3 дня не найдено сообщений по вашим ключевым словам в каналах-источниках.",
+        message: `За последние 3 дня не найдено сообщений по ключевым словам [${keywordList.join(", ")}] в каналах-источниках. Попробуйте нажать "Собрать" в разделе Источники для загрузки сообщений.`,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Generate digest with AI
+    // Generate AI summary
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const messagesText = allMessages.map((m, i) =>
+    const messagesText = uniqueMessages.slice(0, 30).map((m, i) =>
       `${i + 1}. [${m.channel}] (${new Date(m.date).toLocaleDateString("ru")}): ${m.text}`
     ).join("\n\n");
 
@@ -125,7 +164,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
           {
             role: "system",
@@ -146,7 +185,7 @@ serve(async (req) => {
           },
           {
             role: "user",
-            content: `Проанализируй и создай обзор из ${allMessages.length} сообщений, найденных по ключевым словам [${keywordList.join(", ")}]:\n\n${messagesText}`,
+            content: `Проанализируй и создай обзор из ${uniqueMessages.length} сообщений, найденных по ключевым словам [${keywordList.join(", ")}]:\n\n${messagesText}`,
           },
         ],
       }),
@@ -158,7 +197,7 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error("AI gateway error");
+      throw new Error(`AI gateway error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
@@ -166,7 +205,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       content,
-      messagesFound: allMessages.length,
+      messagesFound: uniqueMessages.length,
       channelsScanned: channels.length,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
