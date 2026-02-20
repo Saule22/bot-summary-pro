@@ -954,11 +954,13 @@ serve(async (req) => {
   }
 
   // Validate webhook secret token from Telegram
-  const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
-  if (WEBHOOK_SECRET) {
+  // Sanitize the same way as set-telegram-webhook (only A-Z, a-z, 0-9, _, -)
+  const RAW_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
+  const WEBHOOK_SECRET = RAW_SECRET.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 256);
+  if (WEBHOOK_SECRET.length > 0) {
     const receivedToken = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
     if (receivedToken !== WEBHOOK_SECRET) {
-      console.error("Invalid webhook secret token");
+      console.error("Invalid webhook secret token. Received:", receivedToken);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { "Content-Type": "application/json" } }

@@ -16,14 +16,17 @@ serve(async (req) => {
 
   try {
     const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot`;
-    const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
+    const RAW_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
+    // Telegram only allows A-Z, a-z, 0-9, _ and - in secret tokens
+    const WEBHOOK_SECRET = RAW_SECRET.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 256);
 
     const webhookBody: Record<string, unknown> = {
       url: webhookUrl,
       allowed_updates: ["message", "callback_query", "channel_post", "edited_channel_post"],
     };
-    if (WEBHOOK_SECRET) {
+    if (WEBHOOK_SECRET.length > 0) {
       webhookBody.secret_token = WEBHOOK_SECRET;
+      console.log("Using sanitized secret token of length:", WEBHOOK_SECRET.length);
     }
 
     const response = await fetch(`${TELEGRAM_API}/setWebhook`, {
