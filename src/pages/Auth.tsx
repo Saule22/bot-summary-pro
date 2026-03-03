@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Bot, Mail, Lock } from "lucide-react";
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,14 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      if (isLogin) {
+      if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        toast.success("Письмо для сброса пароля отправлено на вашу почту!");
+        setMode("login");
+      } else if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         navigate("/");
@@ -48,7 +55,7 @@ const Auth = () => {
           </div>
           <CardTitle className="text-2xl">AI Content Bot</CardTitle>
           <p className="text-sm text-muted-foreground">
-            {isLogin ? "Войдите в систему" : "Создайте аккаунт"}
+            {mode === "login" ? "Войдите в систему" : mode === "signup" ? "Создайте аккаунт" : "Восстановление пароля"}
           </p>
         </CardHeader>
         <CardContent>
@@ -64,28 +71,46 @@ const Auth = () => {
                 required
               />
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="password"
-                placeholder="Пароль"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10"
-                required
-                minLength={6}
-              />
-            </div>
+            {mode !== "forgot" && (
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="Пароль"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10"
+                  required
+                  minLength={6}
+                />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Загрузка..." : isLogin ? "Войти" : "Зарегистрироваться"}
+              {loading
+                ? "Загрузка..."
+                : mode === "login"
+                ? "Войти"
+                : mode === "signup"
+                ? "Зарегистрироваться"
+                : "Отправить ссылку"}
             </Button>
           </form>
-          <div className="mt-4 text-center">
+          <div className="mt-4 flex flex-col items-center gap-2">
+            {mode === "login" && (
+              <button
+                onClick={() => setMode("forgot")}
+                className="text-sm text-muted-foreground hover:underline"
+              >
+                Забыли пароль?
+              </button>
+            )}
             <button
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => setMode(mode === "login" ? "signup" : "login")}
               className="text-sm text-primary hover:underline"
             >
-              {isLogin ? "Нет аккаунта? Зарегистрируйтесь" : "Есть аккаунт? Войдите"}
+              {mode === "login"
+                ? "Нет аккаунта? Зарегистрируйтесь"
+                : "Есть аккаунт? Войдите"}
             </button>
           </div>
         </CardContent>
