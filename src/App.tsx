@@ -19,6 +19,7 @@ import SourcesPanel from "./components/SourcesPanel";
 import FindInfoPanel from "./components/FindInfoPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import Proposal from "./pages/Proposal";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +32,7 @@ const App = () => (
         <Routes>
           <Route path="/landing" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/proposal/:clientName" element={<Proposal />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<DashboardPanel />} />
