@@ -23,6 +23,15 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) throw new Error("Unauthorized");
 
+    // Parse request body
+    let periodDays = 3;
+    let language = "ru";
+    try {
+      const body = await req.json();
+      if (body.period && [1, 3, 7].includes(body.period)) periodDays = body.period;
+      if (body.language && ["ru", "kk"].includes(body.language)) language = body.language;
+    } catch { /* no body */ }
+
     // Get user's source channels (type = 'source')
     const { data: channels } = await supabase
       .from("channels")
@@ -49,14 +58,14 @@ serve(async (req) => {
     }
 
     const channelIds = channels.map((c: any) => c.id);
-    const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
+    const sinceDate = new Date(Date.now() - periodDays * 86400000).toISOString();
 
     // Search messages from DB (collected via fetch-channel-messages)
     const { data: dbMessages } = await supabase
       .from("messages")
       .select("text, message_date, source_url, channel_id")
       .in("channel_id", channelIds)
-      .gte("message_date", threeDaysAgo)
+      .gte("message_date", sinceDate)
       .order("message_date", { ascending: false })
       .limit(200);
 
@@ -117,7 +126,7 @@ serve(async (req) => {
 
           for (let i = 0; i < texts.length; i++) {
             const date = dates[i] || new Date().toISOString();
-            if (new Date(date) < new Date(threeDaysAgo)) continue;
+            if (new Date(date) < new Date(sinceDate)) continue;
             const text = texts[i];
             const matchesKeyword = keywordList.some((kw: string) =>
               text.toLowerCase().includes(kw.toLowerCase())
@@ -145,7 +154,7 @@ serve(async (req) => {
     if (uniqueMessages.length === 0) {
       return new Response(JSON.stringify({
         empty: true,
-        message: `За последние 3 дня не найдено сообщений по ключевым словам [${keywordList.join(", ")}] в каналах-источниках. Попробуйте нажать "Собрать" в разделе Источники для загрузки сообщений.`,
+        message: `За последние ${periodDays} дн. не найдено сообщений по ключевым словам [${keywordList.join(", ")}]. Нажмите "Собрать" в разделе Источники.`,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -168,20 +177,20 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Ты — AI-аналитик. Создай структурированный обзор найденной информации на русском языке.
+            content: `Ты — AI-аналитик. Создай структурированный обзор найденной информации на ${language === "kk" ? "казахском" : "русском"} языке.
 
 Формат:
-## 📊 Обзор найденной информации
-Краткое резюме: что найдено, сколько источников.
+## 📊 ${language === "kk" ? "Табылған ақпаратқа шолу" : "Обзор найденной информации"}
+${language === "kk" ? "Қысқаша түйін: не табылды, қанша дереккөз." : "Краткое резюме: что найдено, сколько источников."}
 
-Далее для каждой темы/новости:
-### [Заголовок]
-[Краткое саммари в 2-3 предложения]
-**Источник:** [название канала]
+${language === "kk" ? "Әр тақырып/жаңалық бойынша:" : "Далее для каждой темы/новости:"}
+### [${language === "kk" ? "Тақырып" : "Заголовок"}]
+[${language === "kk" ? "2-3 сөйлеммен қысқаша мазмұны" : "Краткое саммари в 2-3 предложения"}]
+**${language === "kk" ? "Дереккөз" : "Источник"}:** [${language === "kk" ? "арна атауы" : "название канала"}]
 
-В конце:
-## 💡 Ключевые выводы
-[3-5 ключевых выводов из найденной информации]`,
+${language === "kk" ? "Соңында:" : "В конце:"}
+## 💡 ${language === "kk" ? "Негізгі тұжырымдар" : "Ключевые выводы"}
+[${language === "kk" ? "Табылған ақпараттан 3-5 негізгі тұжырым" : "3-5 ключевых выводов из найденной информации"}]`,
           },
           {
             role: "user",
